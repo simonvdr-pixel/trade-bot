@@ -1,380 +1,423 @@
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<meta name="theme-color" content="#0a0c12"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<title>Bitvavo Koppeling — TradeBot</title>
-<script src="bitvavo.js"></script>
-<style>
-:root{
-  --bg:#0a0c12;--panel:#12151f;--panel2:#181c28;--border:#1e2436;
-  --text:#e8edf5;--sub:#8892a4;--dim:#4a5568;
-  --green:#00d68f;--red:#ff4757;--blue:#4a9eff;--amber:#ffaa00;--purple:#b47aff;
-  --bv:#1a56db;
-  --safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px);
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,'SF Pro Display','Segoe UI',sans-serif}
-body{padding:calc(16px + var(--safe-top)) 16px calc(32px + var(--safe-bot))}
-h1{font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-bottom:4px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
-.card-title{color:var(--sub);font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:12px}
-label{display:block;font-size:12px;color:var(--sub);margin-bottom:5px;margin-top:14px}
-label:first-child{margin-top:0}
-input{width:100%;padding:12px 14px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none}
-input:focus{border-color:var(--blue)}
-.btn{width:100%;padding:14px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:opacity 0.15s}
-.btn:active{opacity:0.8}
-.btn:disabled{opacity:0.5;cursor:not-allowed}
-.btn-bv{background:var(--bv);color:#fff}
-.btn-green{background:var(--green);color:#000}
-.btn-red{background:var(--red);color:#fff}
-.btn-outline{background:transparent;border:1px solid var(--border);color:var(--sub)}
-.row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
-.row:last-child{border-bottom:none}
-.row-label{color:var(--sub)}
-.row-val{font-weight:600}
-.step{display:flex;gap:10px;margin-bottom:14px;font-size:13px;line-height:1.5}
-.step-num{min-width:26px;height:26px;border-radius:50%;background:var(--bv);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0}
-.warning{background:#2a1200;border:1px solid #ff470033;border-radius:10px;padding:12px 14px;font-size:12px;color:var(--amber);margin-bottom:14px;line-height:1.6}
-.success{background:#0d2b1a;border:1px solid var(--green)44;border-radius:10px;padding:12px 14px;font-size:12px;color:var(--green);line-height:1.6}
-.info{background:#0d1a2b;border:1px solid var(--blue)44;border-radius:10px;padding:12px 14px;font-size:12px;color:var(--blue);line-height:1.6}
-.status-box{border-radius:12px;padding:14px;margin-bottom:14px;border:1px solid var(--border);background:var(--panel2)}
-.tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;display:inline-block}
-.price-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
-.price-row:last-child{border-bottom:none}
-#toast{position:fixed;top:calc(12px + var(--safe-top));left:50%;transform:translateX(-50%) translateY(-70px);background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;white-space:nowrap;z-index:999;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1)}
-#toast.show{transform:translateX(-50%) translateY(0)}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style>
-</head>
-<body>
-<div id="toast"></div>
+// ══════════════════════════════════════════════════════════════════
+// BITVAVO WEBSOCKET CLIENT — TradeBot (gecorrigeerd)
+// ══════════════════════════════════════════════════════════════════
+// 100% WebSocket — geen CORS problemen, werkt direct in browser
+// Docs: https://docs.bitvavo.com/docs/websocket-overview/
+// WS:   wss://ws.bitvavo.com/v2
+//
+// BELANGRIJK — correcties t.o.v. vorige versie:
+//  - Bitvavo gebruikt 'requestId' om verzoek en antwoord te koppelen
+//    (niet '_id')
+//  - Er bestaat geen 'getAccount' actie — gebruik 'getBalance' voor saldo
+//  - Antwoorden komen terug als { action, response, requestId }
+// ══════════════════════════════════════════════════════════════════
 
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
-  <a href="index.html" style="color:var(--blue);font-size:24px;text-decoration:none;font-weight:300">←</a>
-  <div>
-    <h1>🇳🇱 Bitvavo koppeling</h1>
-    <div style="color:var(--sub);font-size:13px">100% WebSocket · geen CORS problemen</div>
-  </div>
-</div>
+const BV_WS = 'wss://ws.bitvavo.com/v2';
 
-<div class="info">
-  📡 Deze koppeling gebruikt <b>uitsluitend WebSocket</b> (geen REST/fetch calls). Dat omzeilt browser CORS-beperkingen volledig — prijzen, orders én accountgegevens lopen via één live verbinding.
-</div>
+const BV_SYMBOL_MAP = {
+  'BTC/EUR':  'BTC-EUR',
+  'ETH/EUR':  'ETH-EUR',
+  'SOL/EUR':  'SOL-EUR',
+  'XRP/EUR':  'XRP-EUR',
+  'ADA/EUR':  'ADA-EUR',
+  'DOGE/EUR': 'DOGE-EUR',
+  'BNB/EUR':  'BNB-EUR',
+  'AVAX/EUR': 'AVAX-EUR',
+  'DOT/EUR':  'DOT-EUR',
+  'LINK/EUR': 'LINK-EUR',
+  'XLM/EUR':  'XLM-EUR',
+  'RE/EUR':   'RE-EUR',
+  'WLD/EUR':  'WLD-EUR',
+  'SUI/EUR':  'SUI-EUR',
+  'FET/EUR':  'FET-EUR',
+  'ARX/EUR':  'ARX-EUR',
+  'EIGEN/EUR':'EIGEN-EUR',
+  'SYN/EUR':  'SYN-EUR',
+  'HYPE/EUR': 'HYPE-EUR',
+  'TAO/EUR':  'TAO-EUR',
+};
+const BV_SYMBOL_REV = Object.fromEntries(
+  Object.entries(BV_SYMBOL_MAP).map(([k,v]) => [v,k])
+);
 
-<!-- Status -->
-<div class="status-box" id="status-box">
-  <div style="display:flex;align-items:center;gap:10px">
-    <div id="status-dot" style="width:10px;height:10px;border-radius:50%;background:var(--dim);flex-shrink:0"></div>
-    <div>
-      <div style="font-weight:700" id="status-text">Niet verbonden</div>
-      <div style="font-size:11px;color:var(--sub);margin-top:1px" id="status-detail">Vul je API sleutels in om te starten</div>
-    </div>
-  </div>
-</div>
-
-<!-- Stap-voor-stap -->
-<div class="card">
-  <div class="card-title">📋 API key aanmaken op Bitvavo</div>
-  <div class="step"><div class="step-num">1</div><div>Ga naar <b>bitvavo.com</b> en log in op je account</div></div>
-  <div class="step"><div class="step-num">2</div><div>Klik rechtsboven op je <b>naam → Instellingen → API</b></div></div>
-  <div class="step"><div class="step-num">3</div><div>Klik <b>"API sleutel toevoegen"</b> en geef het een naam (bijv. "TradeBot")</div></div>
-  <div class="step"><div class="step-num">4</div>
-    <div>Vink aan:<br>
-      <b style="color:var(--green)">✓ Weergeven</b> (verplicht)<br>
-      <b style="color:var(--green)">✓ Handelen</b> (voor automatische orders)<br>
-      <b style="color:var(--red)">✗ Opnemen — NOOIT aanzetten!</b>
-    </div>
-  </div>
-  <div class="step"><div class="step-num">5</div><div>Kopieer de <b>API Key</b> én <b>API Secret</b> — het secret zie je maar <b>één keer</b>!</div></div>
-  <a href="https://account.bitvavo.com/user/api" target="_blank"
-    style="display:block;margin-top:6px;padding:12px 14px;background:var(--bv)22;border:1px solid var(--bv)55;border-radius:10px;color:var(--bv);font-weight:700;font-size:14px;text-align:center;text-decoration:none">
-    Ga naar Bitvavo API instellingen →
-  </a>
-</div>
-
-<!-- API sleutels invoeren -->
-<div class="card">
-  <div class="card-title">🔑 Jouw API sleutels</div>
-  <div class="warning">
-    🔒 Je sleutels worden <b>alleen lokaal opgeslagen</b> op jouw eigen apparaat en worden nooit naar een server verstuurd — alle verbinding gaat direct vanuit je browser naar Bitvavo.<br><br>
-    Geef <b>nooit</b> opname-rechten aan je API key.
-  </div>
-  <label>API Key</label>
-  <input type="text" id="api-key" placeholder="Plak hier je Bitvavo API Key..." autocomplete="off" spellcheck="false"/>
-  <label>API Secret</label>
-  <div style="position:relative">
-    <input type="password" id="api-secret" placeholder="Plak hier je Bitvavo API Secret..." autocomplete="off" spellcheck="false" style="padding-right:70px"/>
-    <button onclick="toggleSecret()" id="secret-btn"
-      style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--blue);cursor:pointer;font-size:12px;font-weight:600">Toon</button>
-  </div>
-
-  <div style="display:flex;gap:8px;margin-top:14px">
-    <button class="btn btn-bv" onclick="testConnection()" style="flex:1" id="test-btn">🔌 Verbinden via WebSocket</button>
-    <button class="btn btn-outline" onclick="clearKeys()" style="flex:0 0 auto;width:50px;margin-top:8px">✕</button>
-  </div>
-</div>
-
-<!-- Account info — zichtbaar na verbinding -->
-<div class="card" id="account-card" style="display:none">
-  <div class="card-title">👤 Account & saldo</div>
-  <div id="account-info"></div>
-  <button class="btn btn-green" onclick="saveAndReturn()" style="margin-top:14px">✓ Opslaan & terug naar bot</button>
-</div>
-
-<!-- Live prijzen test -->
-<div class="card" id="prices-card" style="display:none">
-  <div class="card-title">📡 Live prijzen (WebSocket ticker)</div>
-  <div id="live-prices"></div>
-</div>
-
-<!-- Debug log -->
-<div class="card" id="debug-card" style="display:none">
-  <div class="card-title">🔍 Verbindingslog (debug)</div>
-  <div id="debug-log" style="font-family:monospace;font-size:11px;color:var(--sub);max-height:160px;overflow-y:auto;line-height:1.6"></div>
-</div>
-
-<!-- Opgeslagen verbinding -->
-<div class="card" id="saved-card" style="display:none">
-  <div class="card-title">💾 Opgeslagen verbinding</div>
-  <div id="saved-info"></div>
-  <div style="display:flex;gap:8px;margin-top:14px">
-    <button class="btn btn-bv" onclick="reconnect()" style="flex:1">↺ Herverbinden</button>
-    <button class="btn btn-red" onclick="disconnectSaved()" style="flex:1">Verwijder sleutels</button>
-  </div>
-</div>
-
-<!-- Fees info -->
-<div class="card">
-  <div class="card-title">💸 Bitvavo fees</div>
-  <div class="row"><span class="row-label">Maker fee</span><span class="row-val" style="color:var(--green)">0.15%</span></div>
-  <div class="row"><span class="row-label">Taker fee</span><span class="row-val" style="color:var(--green)">0.25%</span></div>
-  <div class="row"><span class="row-label">Minimum order</span><span class="row-val">€5</span></div>
-  <div class="row"><span class="row-label">SEPA storting</span><span class="row-val" style="color:var(--green)">✓ Gratis</span></div>
-</div>
-
-<script>
-let client = null;
-let savedConfig = JSON.parse(localStorage.getItem('tb_bitvavo') || 'null');
-let connectTimeout = null;
-
-function init() {
-  if (savedConfig) showSaved();
+// ── HMAC-SHA256 ───────────────────────────────────────────────────
+async function hmacSHA256(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret),
+    { name:'HMAC', hash:'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return Array.from(new Uint8Array(sig))
+    .map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-function toggleSecret() {
-  const inp = document.getElementById('api-secret');
-  const btn = document.getElementById('secret-btn');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-  btn.textContent = inp.type === 'password' ? 'Toon' : 'Verberg';
-}
+// ══════════════════════════════════════════════════════════════════
+class BitvavoClient {
+  constructor({ apiKey, apiSecret }) {
+    this.apiKey    = apiKey;
+    this.apiSecret = apiSecret;
+    this.ws        = null;
+    this.connected = false;
+    this.authenticated = false;
 
-// ── Verbinding maken via WebSocket ──────────────────────────────
-async function testConnection() {
-  const apiKey    = document.getElementById('api-key').value.trim();
-  const apiSecret = document.getElementById('api-secret').value.trim();
-  if (!apiKey || !apiSecret) { toast('Vul API Key en Secret in', 'var(--red)'); return; }
+    // Callbacks
+    this.onPrice      = null;
+    this.onCandle     = null;
+    this.onOrder      = null;
+    this.onFill       = null;
+    this.onError      = null;
+    this.onConnect    = null;
+    this.onDisconnect = null;
+    this.onLog        = null; // optioneel: (msg) => {} voor debug
 
-  const btn = document.getElementById('test-btn');
-  btn.innerHTML = '<span class="spinner"></span>Verbinden via WebSocket...';
-  btn.disabled = true;
-  setStatus('connecting');
-
-  // Sluit oude client als die er is
-  if (client) { try { client.disconnect(); } catch {} }
-
-  client = new BitvavoClient({ apiKey, apiSecret });
-
-  // Timeout vangnet — als authenticatie te lang duurt
-  connectTimeout = setTimeout(() => {
-    setStatus('error', 'Time-out bij authenticeren. Check: zijn "View" en "Trading" rechten aan? Klopt de Secret (geen spaties)?');
-    toast('Authenticatie time-out', 'var(--red)');
-    btn.innerHTML = '🔌 Verbinden via WebSocket';
-    btn.disabled = false;
-  }, 12000);
-
-  client.onError = (msg) => {
-    clearTimeout(connectTimeout);
-    setStatus('error', msg);
-    toast('Fout: ' + msg, 'var(--red)');
-    btn.innerHTML = '🔌 Verbinden via WebSocket';
-    btn.disabled = false;
-  };
-
-  client.onLog = (msg) => {
-    console.log('[Bitvavo debug]', msg);
-    const dc = document.getElementById('debug-card');
-    const dl = document.getElementById('debug-log');
-    if (dc) dc.style.display = 'block';
-    if (dl) {
-      const time = new Date().toLocaleTimeString('nl-NL');
-      dl.innerHTML += `<div>[${time}] ${msg}</div>`;
-      dl.scrollTop = dl.scrollHeight;
-    }
-  };
-
-  client.onConnect = async () => {
-    clearTimeout(connectTimeout);
-    try {
-      // Saldo ophalen via WebSocket (getBalance — getAccount bestaat niet)
-      const balances = await client.getAllBalances();
-      const withValue = (balances || []).filter(b => parseFloat(b.available) > 0 || parseFloat(b.inOrder) > 0);
-
-      setStatus('connected', 'Live WebSocket verbinding actief');
-      showAccountInfo(withValue, {});
-      startLivePrices();
-      toast('✓ Verbonden met Bitvavo via WebSocket!', 'var(--green)');
-    } catch (err) {
-      setStatus('error', err.message);
-      toast('Fout bij ophalen saldo: ' + err.message, 'var(--red)');
-    } finally {
-      btn.innerHTML = '🔌 Verbinden via WebSocket';
-      btn.disabled = false;
-    }
-  };
-
-  client.onDisconnect = () => {
-    if (document.getElementById('status-text').textContent.includes('Verbonden')) {
-      setStatus('error', 'Verbinding verbroken — herverbinden...');
-    }
-  };
-
-  client.connect();
-}
-
-function showAccountInfo(balances, account) {
-  const card = document.getElementById('account-card');
-  const info  = document.getElementById('account-info');
-  card.style.display = 'block';
-
-  const eurBal = balances.find(b => b.symbol === 'EUR');
-
-  info.innerHTML = `
-    <div class="success" style="margin-bottom:12px">✓ Succesvol verbonden via WebSocket</div>
-    <div class="row"><span class="row-label">EUR saldo</span><span class="row-val" style="color:var(--green)">€${eurBal ? parseFloat(eurBal.available).toFixed(2) : '0.00'}</span></div>
-    <div class="row"><span class="row-label">Verbinding</span><span class="row-val">📡 WebSocket (live)</span></div>
-    ${balances.length > 0 ? `
-      <div style="margin-top:12px;margin-bottom:6px;font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:0.8px;font-weight:600">Saldo</div>
-      ${balances.slice(0,8).map(b=>`
-        <div class="row">
-          <span class="row-label">${b.symbol}</span>
-          <span class="row-val">${parseFloat(b.available).toFixed(6)}
-            ${parseFloat(b.inOrder)>0 ? `<span style="color:var(--dim);font-size:11px"> (in order: ${parseFloat(b.inOrder).toFixed(4)})</span>` : ''}
-          </span>
-        </div>`).join('')}
-    ` : '<div style="color:var(--sub);font-size:12px;margin-top:8px">Geen saldo gevonden — stort eerst EUR of crypto op je Bitvavo account.</div>'}
-  `;
-}
-
-// ── Live prijzen via WebSocket ticker (start automatisch) ───────
-function startLivePrices() {
-  document.getElementById('prices-card').style.display = 'block';
-  const syms = Object.keys(window.BITVAVO_SYMBOL_MAP);
-  document.getElementById('live-prices').innerHTML = syms
-    .map(sym => `<div class="price-row">
-      <span style="color:var(--sub)">${sym}</span>
-      <span id="price-${sym.replace('/','_')}" style="font-weight:600;color:var(--dim)">wachten op data...</span>
-    </div>`).join('');
-
-  client.onPrice = (sym, price) => {
-    const el = document.getElementById('price-' + sym.replace('/','_'));
-    if (el) {
-      el.textContent = '€' + price.toLocaleString('nl-NL', {minimumFractionDigits:2,maximumFractionDigits:6});
-      el.style.color = 'var(--green)';
-      setTimeout(() => el.style.color = '', 500);
-    }
-    try {
-      const stored = JSON.parse(localStorage.getItem('tb_live_prices') || '{}');
-      stored[sym] = price;
-      localStorage.setItem('tb_live_prices', JSON.stringify(stored));
-    } catch {}
-  };
-
-  client.subscribeTicker(syms);
-}
-
-// ── Opslaan ────────────────────────────────────────────────────────
-function saveAndReturn() {
-  const apiKey    = document.getElementById('api-key').value.trim();
-  const apiSecret = document.getElementById('api-secret').value.trim();
-  if (!apiKey || !apiSecret || !client || !client.authenticated) {
-    toast('Maak eerst een succesvolle verbinding', 'var(--amber)'); return;
+    this._pending  = {};   // requestId → {resolve, reject, timer}
+    this._reqId    = 1;
+    this._subQueue = [];
+    this._reconnectTimer = null;
+    this._destroyed = false;
   }
-  const config = { apiKey, apiSecret, savedAt: new Date().toLocaleDateString('nl-NL'), platform:'bitvavo' };
-  localStorage.setItem('tb_bitvavo', JSON.stringify(config));
-  localStorage.setItem('tb_exchange', 'bitvavo');
-  toast('✓ Opgeslagen! Terug naar bot...', 'var(--green)');
-  setTimeout(() => window.location.href = 'index.html', 1200);
+
+  _log(msg) { if (this.onLog) this.onLog(msg); console.log('[Bitvavo]', msg); }
+
+  // ── Connect & authenticate ──────────────────────────────────────
+  // BELANGRIJK: Bitvavo stuurt GEEN bevestigingsbericht terug bij
+  // succesvolle authenticatie — alleen bij een FOUT komt er een
+  // foutmelding terug. We wachten daarom kort op een mogelijke fout;
+  // komt die niet, dan gaan we uit van een geslaagde authenticatie.
+  connect() {
+    if (this.ws && this.ws.readyState < 2) return;
+    this._destroyed = false;
+    this.ws = new WebSocket(BV_WS);
+    this._authConfirmed = false;
+
+    this.ws.onopen = async () => {
+      this._log('WebSocket open, authenticeren...');
+      const ts  = Date.now();
+      const sig = await hmacSHA256(this.apiSecret, ts + 'GET/v2/websocket');
+      this._send({
+        action:    'authenticate',
+        key:       this.apiKey,
+        signature: sig,
+        timestamp: ts,
+        window:    10000,
+      });
+
+      // Geen expliciete bevestiging te verwachten — neem na korte
+      // stilte (1.2s zonder foutmelding) aan dat auth is geslaagd.
+      this._authFallbackTimer = setTimeout(() => {
+        if (!this._authConfirmed && !this._destroyed) {
+          this._log('Geen foutmelding ontvangen → authenticatie geslaagd');
+          this.authenticated = true;
+          this.connected     = true;
+          this._authConfirmed = true;
+          if (this.onConnect) this.onConnect();
+          this._subQueue.forEach(m => this._send(m));
+          this._subQueue = [];
+        }
+      }, 1200);
+    };
+
+    this.ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      this._log('← ' + e.data.slice(0, 150));
+      // Bitvavo stuurt soms een array van berichten (bv. meerdere balances)
+      if (Array.isArray(msg)) {
+        msg.forEach(m => this._handle(m));
+      } else {
+        this._handle(msg);
+      }
+    };
+
+    this.ws.onerror = () => {
+      this._log('WebSocket fout');
+      if (this.onError) this.onError('WebSocket verbindingsfout');
+    };
+
+    this.ws.onclose = (e) => {
+      this._log(`WebSocket gesloten (code ${e.code})`);
+      clearTimeout(this._authFallbackTimer);
+      this.connected     = false;
+      this.authenticated = false;
+      if (this.onDisconnect) this.onDisconnect();
+      if (!this._destroyed) {
+        this._reconnectTimer = setTimeout(() => this.connect(), 4000);
+      }
+    };
+  }
+
+  _send(msg) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+    }
+  }
+
+  // ── Request met requestId matching + verzamelen van losse berichten ──
+  // Bitvavo stuurt voor sommige acties (bv. privateGetBalance zonder
+  // 'symbol' filter) één los bericht PER asset, elk met dezelfde requestId.
+  // We verzamelen alle berichten met die requestId en resolven na een
+  // korte stilte (300ms zonder nieuw bericht voor die id).
+  _request(action, params = {}) {
+    return new Promise((resolve, reject) => {
+      const requestId = this._reqId++;
+      const timer = setTimeout(() => {
+        delete this._pending[requestId];
+        reject(new Error(`Timeout op actie '${action}' — geen antwoord van Bitvavo`));
+      }, 10000);
+      this._pending[requestId] = { resolve, reject, timer, action, buffer:[], settleTimer:null };
+
+      const msg = { action, ...params, requestId };
+      if (this.authenticated) {
+        this._send(msg);
+      } else {
+        this._subQueue.push(msg);
+      }
+    });
+  }
+
+  // Voeg een resultaat toe aan de buffer van een pending request en
+  // resolve zodra er even niets meer binnenkomt (debounce 250ms)
+  _bufferResult(requestId, value) {
+    const p = this._pending[requestId];
+    if (!p) return;
+    p.buffer.push(value);
+    clearTimeout(p.settleTimer);
+    p.settleTimer = setTimeout(() => {
+      clearTimeout(p.timer);
+      delete this._pending[requestId];
+      // Eén bericht → geef direct het object terug, anders de hele array
+      p.resolve(p.buffer.length === 1 ? p.buffer[0] : p.buffer);
+    }, 250);
+  }
+
+  // ── Handle incoming messages ────────────────────────────────────
+  _handle(msg) {
+    // 1. Authenticatie respons — als die WEL binnenkomt (sommige
+    //    momenten/versies van de API doen dit blijkbaar toch)
+    if (msg.event === 'authenticate' || (msg.action === 'authenticate')) {
+      clearTimeout(this._authFallbackTimer);
+      this._authConfirmed = true;
+      if (msg.authenticated !== false) {
+        this.authenticated = true;
+        this.connected     = true;
+        this._log('Geauthenticeerd ✓ (expliciete bevestiging)');
+        if (this.onConnect) this.onConnect();
+        this._subQueue.forEach(m => this._send(m));
+        this._subQueue = [];
+      } else {
+        this._log('Authenticatie mislukt: ' + JSON.stringify(msg));
+        if (this.onError) this.onError('Authenticatie mislukt — controleer je API sleutels en of "Trading"/"View" rechten aanstaan');
+      }
+      return;
+    }
+
+    // 2. Foutmelding (met of zonder requestId)
+    if (msg.errorCode !== undefined || msg.error) {
+      const errText = msg.error || `Foutcode ${msg.errorCode}`;
+      if (msg.requestId && this._pending[msg.requestId]) {
+        const p = this._pending[msg.requestId];
+        clearTimeout(p.timer);
+        clearTimeout(p.settleTimer);
+        delete this._pending[msg.requestId];
+        p.reject(new Error(errText));
+      } else {
+        this._log('Fout zonder requestId match: ' + errText);
+        if (this.onError) this.onError(errText);
+      }
+      return;
+    }
+
+    // 3. Antwoord op een actie-verzoek (heeft requestId) — verzamel in buffer
+    if (msg.requestId !== undefined && this._pending[msg.requestId]) {
+      const value = msg.response !== undefined ? msg.response : msg;
+      this._bufferResult(msg.requestId, value);
+      return;
+    }
+
+    // 4. Ticker (live price) — geen requestId, is een subscribe-event
+    if (msg.event === 'ticker' && msg.market) {
+      const ourSym = BV_SYMBOL_REV[msg.market];
+      if (ourSym && msg.lastPrice && this.onPrice) {
+        this.onPrice(ourSym, parseFloat(msg.lastPrice));
+      }
+      return;
+    }
+
+    // 5. Candle update
+    if (msg.event === 'candle' && msg.market && msg.candle) {
+      const ourSym = BV_SYMBOL_REV[msg.market];
+      if (ourSym && this.onCandle) {
+        const k = Array.isArray(msg.candle[0]) ? msg.candle[0] : msg.candle;
+        this.onCandle(ourSym, {
+          t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]),
+          l: parseFloat(k[3]), c: parseFloat(k[4]), v: parseFloat(k[5]),
+        });
+      }
+      return;
+    }
+
+    // 6. Subscribe-bevestiging (event: 'subscribed')
+    if (msg.event === 'subscribed') {
+      this._log('Subscriptie bevestigd: ' + JSON.stringify(msg.subscriptions || msg));
+      return;
+    }
+
+    // 7. Order/fill events (account channel)
+    if (msg.event === 'order' && this.onOrder) { this.onOrder(msg); return; }
+    if (msg.event === 'fill'  && this.onFill)  { this.onFill(msg);  return; }
+
+    // Onbekend event — loggen voor debug
+    this._log('Onbehandeld bericht: ' + JSON.stringify(msg).slice(0,200));
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // SUBSCRIPTIONS (geen requestId nodig, blijven open)
+  // ══════════════════════════════════════════════════════════════
+
+  subscribeTicker(ourSymbols) {
+    const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
+    if (!markets.length) return;
+    const msg = { action:'subscribe', channels:[{ name:'ticker', markets }] };
+    if (this.authenticated) this._send(msg); else this._subQueue.push(msg);
+  }
+
+  subscribeCandles(ourSymbols, interval = '5m') {
+    const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
+    if (!markets.length) return;
+    const msg = { action:'subscribe', channels:[{ name:'candles', interval:[interval], markets }] };
+    if (this.authenticated) this._send(msg); else this._subQueue.push(msg);
+  }
+
+  subscribeAccount(ourSymbols) {
+    const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
+    if (!markets.length) return;
+    const msg = { action:'subscribe', channels:[{ name:'account', markets }] };
+    if (this.authenticated) this._send(msg); else this._subQueue.push(msg);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACCOUNT ACTIES (vereisen auth) — gecorrigeerde actienamen
+  // ══════════════════════════════════════════════════════════════
+
+  // Saldo ophalen — DE FIX: 'getBalance' bestaat, 'getAccount' niet
+  async getAllBalances() {
+    const res = await this._request('privateGetBalance', {});
+    if (Array.isArray(res)) return res;
+    if (res && res.symbol) return [res]; // één los balance-object
+    return [];
+  }
+
+  async getBalance(symbol) {
+    const res = await this._request('privateGetBalance', symbol ? { symbol } : {});
+    let arr;
+    if (Array.isArray(res)) arr = res;
+    else if (res && res.symbol) arr = [res];
+    else arr = [];
+    if (symbol) return arr.find(b => b.symbol === symbol) || null;
+    return arr;
+  }
+
+  // Account fee-info (REST: GET /account)
+  async getAccountFees() {
+    try {
+      const res = await this._request('getAccountFees', {});
+      return res;
+    } catch {
+      // Sommige Bitvavo API-versies kennen geen WS-actie voor fees — geef leeg terug
+      return null;
+    }
+  }
+
+  // ── Prijs via orderbook (depth 1) ───────────────────────────────
+  async getPrice(ourSymbol) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
+    const res = await this._request('getBook', { market, depth: 1 });
+    const book = res?.response || res;
+    const bids = book.bids || [];
+    const asks = book.asks || [];
+    if (asks.length) return parseFloat(asks[0][0]);
+    if (bids.length) return parseFloat(bids[0][0]);
+    throw new Error('Geen prijs beschikbaar in orderboek');
+  }
+
+  // ── Candle geschiedenis ──────────────────────────────────────────
+  async getCandles(ourSymbol, interval = '5m', limit = 200) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) return [];
+    const res = await this._request('getCandles', { market, interval, limit });
+    const data = res?.response || res;
+    if (!Array.isArray(data)) return [];
+    return data.map(k => ({
+      t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]),
+      l: parseFloat(k[3]), c: parseFloat(k[4]), v: parseFloat(k[5]),
+    })).reverse();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ORDERS (vereisen auth, alleen in live modus)
+  // ══════════════════════════════════════════════════════════════
+
+  async marketBuy(ourSymbol, amountInEur) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
+    if (amountInEur < 5) throw new Error('Minimum ordergrootte is €5');
+    const res = await this._request('privateCreateOrder', {
+      market,
+      side:        'buy',
+      orderType:   'market',
+      amountQuote: amountInEur.toFixed(2),
+      operatorId:  1001, // verplicht veld sinds 2024
+    });
+    return res?.response || res;
+  }
+
+  async marketSell(ourSymbol, amount) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
+    const rounded = parseFloat(amount.toFixed(8));
+    if (rounded <= 0) throw new Error('Hoeveelheid te klein');
+    const res = await this._request('privateCreateOrder', {
+      market,
+      side:       'sell',
+      orderType:  'market',
+      amount:     rounded.toString(),
+      operatorId: 1001,
+    });
+    return res?.response || res;
+  }
+
+  async getOpenOrders(ourSymbol) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    const res = await this._request('getOrders', market ? { market, status:'open' } : { status:'open' });
+    return res?.response || res;
+  }
+
+  async cancelOrder(ourSymbol, orderId) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) throw new Error('Onbekend paar');
+    const res = await this._request('cancelOrder', { market, orderId });
+    return res?.response || res;
+  }
+
+  async getMyTrades(ourSymbol, limit = 50) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) return [];
+    const res = await this._request('getTradeHistory', { market, limit });
+    return res?.response || res || [];
+  }
+
+  // ── Clean disconnect ────────────────────────────────────────────
+  disconnect() {
+    this._destroyed = true;
+    clearTimeout(this._reconnectTimer);
+    if (this.ws) { try { this.ws.close(); } catch {} this.ws = null; }
+    this.connected     = false;
+    this.authenticated = false;
+  }
 }
 
-function showSaved() {
-  const card = document.getElementById('saved-card');
-  const info  = document.getElementById('saved-info');
-  card.style.display = 'block';
-  const masked = savedConfig.apiKey.slice(0,6) + '••••••••' + savedConfig.apiKey.slice(-4);
-  info.innerHTML = `
-    <div class="row"><span class="row-label">Platform</span><span class="row-val">🇳🇱 Bitvavo (WebSocket)</span></div>
-    <div class="row"><span class="row-label">API Key</span><span class="row-val" style="font-family:monospace;font-size:12px">${masked}</span></div>
-    <div class="row"><span class="row-label">Opgeslagen op</span><span class="row-val">${savedConfig.savedAt}</span></div>`;
-}
-function reconnect() {
-  document.getElementById('api-key').value    = savedConfig.apiKey;
-  document.getElementById('api-secret').value = savedConfig.apiSecret;
-  testConnection();
-}
-function disconnectSaved() {
-  if (!confirm('Verwijder opgeslagen API sleutels?')) return;
-  if (client) { try { client.disconnect(); } catch {} }
-  localStorage.removeItem('tb_bitvavo');
-  localStorage.removeItem('tb_exchange');
-  savedConfig = null;
-  document.getElementById('saved-card').style.display = 'none';
-  toast('Sleutels verwijderd');
-}
-function clearKeys() {
-  document.getElementById('api-key').value    = '';
-  document.getElementById('api-secret').value = '';
-  if (client) { try { client.disconnect(); } catch {} client = null; }
-  setStatus('disconnected');
-  document.getElementById('account-card').style.display = 'none';
-  document.getElementById('prices-card').style.display  = 'none';
-}
-
-// ── Status ─────────────────────────────────────────────────────────
-function setStatus(state, detail='') {
-  const dot = document.getElementById('status-dot');
-  const txt = document.getElementById('status-text');
-  const det = document.getElementById('status-detail');
-  const box = document.getElementById('status-box');
-  const S = {
-    disconnected:{ col:'var(--dim)',   txt:'Niet verbonden',          bg:'var(--panel2)', border:'var(--border)' },
-    connecting:  { col:'var(--amber)', txt:'Verbinden via WebSocket...', bg:'#2a1a00',     border:'var(--amber)' },
-    connected:   { col:'var(--green)', txt:'✓ Verbonden met Bitvavo',  bg:'#0d2b1a',       border:'var(--green)' },
-    error:       { col:'var(--red)',   txt:'Verbinding mislukt',       bg:'#2a0d0d',       border:'var(--red)' },
-  };
-  const s = S[state] || S.disconnected;
-  dot.style.background = s.col;
-  dot.style.boxShadow  = state==='connected' ? '0 0 8px var(--green)' : 'none';
-  txt.textContent = s.txt; txt.style.color = s.col;
-  det.textContent = detail;
-  box.style.background = s.bg;
-  box.style.border = '1px solid ' + s.border;
-}
-
-// ── Toast ───────────────────────────────────────────────────────────
-let tt;
-function toast(msg, color='var(--green)') {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.style.color = color;
-  el.classList.add('show'); clearTimeout(tt);
-  tt = setTimeout(()=>el.classList.remove('show'), 2800);
-}
-
-init();
-</script>
-</body>
-</html>
+window.BitvavoClient      = BitvavoClient;
+window.BITVAVO_SYMBOL_MAP = BV_SYMBOL_MAP;
+window.BITVAVO_SYMBOL_REV = BV_SYMBOL_REV;
