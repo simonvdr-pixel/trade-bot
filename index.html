@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0a0c12"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="TradeBot"/>
+<link rel="manifest" href="manifest.json"/>
+<script src="bitvavo.js"></script>
+<title>TradeBot</title>
+<style>
+:root{
+  --bg:#0a0c12;--panel:#12151f;--panel2:#181c28;--border:#1e2436;
+  --text:#e8edf5;--sub:#8892a4;--dim:#4a5568;
+  --green:#00d68f;--red:#ff4757;--blue:#4a9eff;
+  --gold:#ffc947;--purple:#b47aff;--cyan:#00d4ff;--amber:#ffaa00;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,'SF Pro Display','Segoe UI',sans-serif;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100%;padding-top:var(--safe-top)}
+#header{padding:12px 16px 10px;border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0}
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(64px + var(--safe-bot))}
+#nav{position:fixed;bottom:0;left:0;right:0;height:calc(60px + var(--safe-bot));padding-bottom:var(--safe-bot);background:var(--panel);border-top:1px solid var(--border);display:flex;z-index:100}
+.logo{font-size:18px;font-weight:800;letter-spacing:-0.5px}
+.badge{font-size:10px;font-weight:700;padding:3px 7px;border-radius:4px;letter-spacing:0.5px}
+.portfolio-val{font-size:20px;font-weight:800;line-height:1}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px;font-weight:600}
+.nav-btn.active{color:var(--blue)}
+.nav-btn svg{width:22px;height:22px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin:0 12px 10px}
+.card-title{color:var(--sub);font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:10px}
+.market-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.market-row:last-child{border-bottom:none}
+.tf-tabs{display:flex;gap:6px;margin:12px 12px 6px}
+.tf-tab{flex:1;padding:8px 0;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.15s}
+.tf-tab.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.signal-box{border-radius:12px;padding:14px 16px;margin:0 12px 10px;display:flex;align-items:center;gap:12px}
+.ind-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.ind-row:last-child{border-bottom:none}
+.ind-name{color:var(--sub)}
+.summary-tf{display:flex;gap:8px;margin:0 12px 10px}
+.summary-tf-item{flex:1;background:var(--panel2);border-radius:10px;padding:10px 8px;text-align:center;border:1px solid var(--border);cursor:pointer}
+.summary-tf-label{font-size:10px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.summary-tf-signal{font-size:13px;font-weight:700;margin-top:4px}
+.pos-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.pos-row:last-child{border-bottom:none}
+.log-line{font-size:11px;font-family:monospace;padding:4px 0;color:var(--sub);border-bottom:1px solid #1a1e2a}
+.trade-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.trade-row:last-child{border-bottom:none}
+.setting-row{margin-bottom:16px}
+.setting-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+.setting-label span:last-child{font-weight:700}
+input[type=range]{width:100%;accent-color:var(--blue)}
+.mkt-chip{padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.buy-sell-row{display:flex;gap:8px;margin:0 12px 10px}
+.btn-buy{flex:1;padding:14px;border-radius:12px;border:none;background:var(--green);color:#000;font-weight:800;font-size:15px;cursor:pointer}
+.btn-sell{flex:1;padding:14px;border-radius:12px;border:none;background:var(--red);color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+#toast{position:fixed;top:calc(16px + var(--safe-top));left:50%;transform:translateX(-50%) translateY(-80px);background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;white-space:nowrap;z-index:999;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none}
+#toast.show{transform:translateX(-50%) translateY(0)}
+.page{display:none}.page.active{display:block}
+
+/* ── Modal overlay ── */
+#modal-overlay{position:fixed;inset:0;background:#000a;z-index:200;display:none;align-items:flex-end;justify-content:center}
+#modal-overlay.open{display:flex}
+#modal-box{background:var(--panel);border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-height:90vh;overflow-y:auto;padding:20px 16px calc(20px + var(--safe-bot))}
+.modal-title{font-size:17px;font-weight:800;margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--sub);margin-bottom:18px}
+
+/* ── Candle builder ── */
+.builder-candles{display:flex;gap:8px;margin:12px 0;align-items:flex-end;min-height:80px}
+.builder-slot{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.builder-slot-label{font-size:10px;color:var(--sub);font-weight:600}
+.candle-preview{width:28px;position:relative}
+
+/* Condition pills */
+.cond-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.cond-pill{padding:8px 6px;border-radius:8px;border:1px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;text-align:center;background:var(--panel2);color:var(--sub);transition:all 0.15s}
+.cond-pill.sel{border-color:var(--blue);background:var(--blue)22;color:var(--blue)}
+
+/* Custom pattern cards */
+.custom-pat{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+.custom-pat-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.custom-pat-name{font-weight:700;font-size:14px}
+.seq-preview{display:flex;gap:4px;align-items:center;margin:6px 0;font-size:18px}
+.del-btn{background:var(--red)22;border:1px solid var(--red)44;color:var(--red);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
+
+/* step indicator */
+.step-dots{display:flex;gap:6px;justify-content:center;margin:10px 0}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border)}
+.step-dot.active{background:var(--blue)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- HEADER -->
+<div id="header">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="logo">TradeBot</span>
+      <div id="mode-badge" onclick="toggleTradingMode()" style="cursor:pointer;user-select:none">
+        <span class="badge" style="background:#0d2b1a;color:var(--green)">📄 PAPER</span>
+      </div>
+      <a href="bitvavo-setup.html" id="exchange-badge" style="text-decoration:none">
+        <span class="badge" style="background:var(--panel2);color:var(--dim)">🔌 Bitvavo</span>
+      </a>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)">
+      <div id="bot-dot" style="width:7px;height:7px;border-radius:50%;background:var(--dim)"></div>
+      <span id="bot-label">Bot uit</span>
+    </div>
+  </div>
+  <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:flex-end">
+    <div>
+      <div style="font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:0.8px">Portefeuille</div>
+      <div class="portfolio-val" id="hdr-val">$0.00</div>
+      <div id="hdr-pnl" style="font-size:12px;color:var(--dim)">—</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:10px;color:var(--sub)">Cash</div>
+      <div style="font-weight:700" id="hdr-cash">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div id="content">
+<div id="toast"></div>
+
+<!-- MARKTEN -->
+<div class="page active" id="page-markets">
+  <div style="padding:12px 12px 4px;display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:16px;font-weight:800">Markten</div>
+    <div style="font-size:11px;color:var(--sub)" id="tick-indicator">● live</div>
+  </div>
+  <div class="card" id="markets-list"></div>
+</div>
+
+<!-- ANALYSE -->
+<div class="page" id="page-analyse">
+  <div style="padding:12px 12px 4px;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:16px;font-weight:800" id="analyse-title">Analyse</div>
+    <select id="analyse-pair" style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;font-weight:600"></select>
+  </div>
+  <div class="tf-tabs">
+    <div class="tf-tab active" data-tf="5m">5 min</div>
+    <div class="tf-tab" data-tf="1h">1 uur</div>
+    <div class="tf-tab" data-tf="1d">Dag</div>
+    <div class="tf-tab" data-tf="1w">Week</div>
+  </div>
+  <div class="summary-tf" id="tf-summary"></div>
+  <div class="signal-box" id="signal-box"></div>
+  <div class="card" id="pattern-card">
+    <div class="card-title">📊 Herkende patronen</div>
+    <div id="detected-patterns"></div>
+  </div>
+  <div style="margin:0 12px 10px">
+    <div style="background:var(--panel2);border-radius:10px;padding:8px;overflow:hidden">
+      <canvas id="candle-chart" height="160"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Indicatoren</div>
+    <div id="indicators-list"></div>
+  </div>
+  <div class="buy-sell-row">
+    <button class="btn-buy" id="btn-buy">▲ Kopen</button>
+    <button class="btn-sell" id="btn-sell">▼ Verkopen</button>
+  </div>
+</div>
+
+<!-- BOT -->
+<div class="page" id="page-bot">
+  <div style="padding:12px 12px 4px;display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:16px;font-weight:800">Bot</div>
+    <div id="bot-mode-label" style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:#0d2b1a;color:var(--green)">📄 PAPER modus</div>
+  </div>
+
+  <!-- Mode switcher card -->
+  <div class="card" id="mode-card">
+    <div class="card-title">Handelsmodus</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div id="mode-paper" onclick="setMode('paper')"
+        style="flex:1;padding:12px 8px;border-radius:10px;border:2px solid var(--green);background:var(--green)15;cursor:pointer;text-align:center">
+        <div style="font-size:18px">📄</div>
+        <div style="font-weight:700;font-size:13px;color:var(--green);margin-top:4px">Paper</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">Nep geld<br>Geen risico</div>
+      </div>
+      <div id="mode-live" onclick="setMode('live')"
+        style="flex:1;padding:12px 8px;border-radius:10px;border:2px solid var(--border);background:var(--panel2);cursor:pointer;text-align:center;opacity:0.6">
+        <div style="font-size:18px">💶</div>
+        <div style="font-weight:700;font-size:13px;color:var(--sub);margin-top:4px">Live</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">Echt geld<br>Bitvavo orders</div>
+      </div>
+    </div>
+    <div id="mode-info" style="font-size:12px;border-radius:8px;padding:10px 12px;background:#0d2b1a;border:1px solid var(--green)33;color:var(--green)">
+      📄 <b>Paper modus actief</b> — je handelt met nep geld. Bitvavo prijzen zijn wel live als je verbonden bent.
+    </div>
+    <!-- Paper kapitaal instellen -->
+    <div id="paper-capital-row" style="margin-top:10px">
+      <div style="font-size:12px;color:var(--sub);margin-bottom:6px">Nep startkapitaal</div>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="paper-capital-input" placeholder="bijv. 10000"
+          style="flex:1;padding:9px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px"/>
+        <button onclick="setPaperCapital()" style="padding:9px 14px;background:var(--blue);border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer">Stel in</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button onclick="quickCapital(1000)"  style="padding:5px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--sub);font-size:11px;cursor:pointer">€1.000</button>
+        <button onclick="quickCapital(5000)"  style="padding:5px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--sub);font-size:11px;cursor:pointer">€5.000</button>
+        <button onclick="quickCapital(10000)" style="padding:5px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--sub);font-size:11px;cursor:pointer">€10.000</button>
+        <button onclick="quickCapital(50000)" style="padding:5px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--sub);font-size:11px;cursor:pointer">€50.000</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Paper stats -->
+  <div class="card" id="paper-stats-card">
+    <div class="card-title">Paper portfolio</div>
+    <div id="paper-stats"></div>
+  </div>
+
+  <div style="margin:0 12px 10px">
+    <button id="toggle-bot-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:12px;border:none;width:100%;font-size:15px;font-weight:700;cursor:pointer;background:var(--green);color:#000">▶ Start bot</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Open posities</div>
+    <div id="open-positions"><div style="color:var(--dim);font-size:13px">Geen open posities</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Bot log</div>
+    <div id="bot-log" style="max-height:220px;overflow-y:auto"><div style="color:var(--dim);font-size:12px">Start de bot...</div></div>
+  </div>
+</div>
+
+<!-- TRADES -->
+<div class="page" id="page-trades">
+  <div style="padding:12px 12px 4px;display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:16px;font-weight:800">Trades</div>
+    <div id="trades-stats" style="font-size:11px;color:var(--sub)"></div>
+  </div>
+  <div class="card"><div id="trades-list"><div style="color:var(--dim);font-size:13px">Nog geen trades.</div></div></div>
+</div>
+
+<!-- PATRONEN (new page) -->
+<div class="page" id="page-patterns">
+  <div style="padding:12px 12px 4px;display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:16px;font-weight:800">Mijn Patronen</div>
+    <button onclick="openBuilder()" style="padding:7px 14px;background:var(--blue);border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">+ Nieuw</button>
+  </div>
+
+  <!-- Custom patterns list -->
+  <div class="card">
+    <div class="card-title">Aangepaste sequenties</div>
+    <div id="custom-patterns-list"></div>
+  </div>
+
+  <!-- Built-in toggles -->
+  <div class="card">
+    <div class="card-title">Ingebouwde patronen — bot aan/uit</div>
+    <div id="pattern-toggles"></div>
+  </div>
+
+  <!-- Strategy picker -->
+  <div class="card">
+    <div class="card-title">Bot strategie</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="strat-btns">
+      <button class="tf-tab" id="ind-RSI" onclick="setIndicator('RSI')">RSI</button>
+      <button class="tf-tab" id="ind-MA" onclick="setIndicator('MA')">MA Cross</button>
+      <button class="tf-tab" id="ind-Pattern" onclick="setIndicator('Pattern')">Patronen</button>
+      <button class="tf-tab active" id="ind-Combined" onclick="setIndicator('Combined')">Gecombineerd</button>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:var(--sub)" id="strategy-hint">Bot combineert RSI, MA én patronen voor het sterkste signaal.</div>
+  </div>
+
+  <!-- Risk -->
+  <div class="card">
+    <div class="card-title">Risicobeheer</div>
+    <div class="setting-row">
+      <div class="setting-label"><span>Positiegrootte</span><span id="lbl-pos">10%</span></div>
+      <input type="range" min="1" max="50" value="10" oninput="document.getElementById('lbl-pos').textContent=this.value+'%';strategy.positionSize=+this.value"/>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label"><span>Stop-Loss</span><span id="lbl-sl">5%</span></div>
+      <input type="range" min="1" max="20" value="5" oninput="document.getElementById('lbl-sl').textContent=this.value+'%';strategy.stopLoss=+this.value"/>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label"><span>Take-Profit</span><span id="lbl-tp">10%</span></div>
+      <input type="range" min="1" max="50" value="10" oninput="document.getElementById('lbl-tp').textContent=this.value+'%';strategy.takeProfit=+this.value"/>
+    </div>
+  </div>
+
+  <!-- Capital reset -->
+  <div class="card">
+    <div class="card-title">Kapitaal resetten</div>
+    <div style="display:flex;gap:8px">
+      <input type="number" id="new-capital" placeholder="bijv. 10000" style="flex:1;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px"/>
+      <button onclick="resetCapital()" style="padding:10px 16px;background:var(--blue);border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer">Reset</button>
+    </div>
+  </div>
+
+  <!-- Markets -->
+  <div class="card">
+    <div class="card-title">Bot markten</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px" id="market-toggles"></div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- NAV -->
+<nav id="nav">
+  <button class="nav-btn active" onclick="showPage('markets',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markten
+  </button>
+  <button class="nav-btn" onclick="showPage('analyse',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Analyse
+  </button>
+  <button class="nav-btn" onclick="showPage('bot',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M12 11V3"/><path d="M8 7h8"/></svg>Bot
+  </button>
+  <button class="nav-btn" onclick="showPage('trades',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>Trades
+  </button>
+  <button class="nav-btn" onclick="showPage('patterns',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="18" rx="1"/><rect x="9" y="8" width="6" height="13" rx="1"/><rect x="16" y="5" width="6" height="16" rx="1"/></svg>Patronen
+  </button>
+</nav>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- PATTERN BUILDER MODAL -->
+<!-- ════════════════════════════════════════════════ -->
+<div id="modal-overlay" onclick="if(event.target===this)closeModal()">
+<div id="modal-box">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <div class="modal-title" id="modal-title">Nieuw patroon</div>
+    <button onclick="closeModal()" style="background:none;border:none;color:var(--sub);font-size:22px;cursor:pointer;padding:0 4px">✕</button>
+  </div>
+  <div class="modal-sub" id="modal-sub">Bouw je eigen candlestick sequentie</div>
+
+  <!-- Step dots -->
+  <div class="step-dots" id="step-dots"></div>
+
+  <!-- STEP 1: name + bias + length -->
+  <div id="step-1">
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Naam</label>
+      <input id="pat-name" type="text" placeholder="bijv. Mijn Bullish Setup" maxlength="30"
+        style="width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Signaalrichting</label>
+      <div style="display:flex;gap:8px">
+        <button class="tf-tab" id="bias-bull" onclick="setBias('bull')">🟢 Bullish (kopen)</button>
+        <button class="tf-tab" id="bias-bear" onclick="setBias('bear')">🔴 Bearish (verkopen)</button>
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Aantal kaarsen in sequentie</label>
+      <div style="display:flex;gap:8px">
+        <button class="tf-tab" onclick="setSeqLen(1)" id="len-1">1</button>
+        <button class="tf-tab" onclick="setSeqLen(2)" id="len-2">2</button>
+        <button class="tf-tab active" onclick="setSeqLen(3)" id="len-3">3</button>
+        <button class="tf-tab" onclick="setSeqLen(4)" id="len-4">4</button>
+        <button class="tf-tab" onclick="setSeqLen(5)" id="len-5">5</button>
+      </div>
+    </div>
+    <button onclick="goStep(2)" style="width:100%;padding:14px;background:var(--blue);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Volgende →</button>
+  </div>
+
+  <!-- STEP 2: define each candle -->
+  <div id="step-2" style="display:none">
+    <div style="font-size:13px;color:var(--sub);margin-bottom:10px">Tik op een kaars om de voorwaarden in te stellen</div>
+
+    <!-- Visual candle row -->
+    <div id="builder-candles" class="builder-candles"></div>
+
+    <!-- Selected candle conditions -->
+    <div id="candle-editor" style="background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:12px"></div>
+
+    <button onclick="goStep(3)" style="width:100%;padding:14px;background:var(--blue);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Volgende →</button>
+  </div>
+
+  <!-- STEP 3: review + save -->
+  <div id="step-3" style="display:none">
+    <div style="font-size:13px;color:var(--sub);margin-bottom:12px">Controleer je patroon</div>
+    <div id="pat-preview-final" style="background:var(--panel2);border-radius:12px;padding:14px;margin-bottom:16px"></div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Emoji (optioneel)</label>
+      <input id="pat-emoji" type="text" placeholder="bijv. 🚀" maxlength="4"
+        style="width:80px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:18px;text-align:center"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Beschrijving (optioneel)</label>
+      <textarea id="pat-desc" rows="2" placeholder="Omschrijf wanneer dit patroon voorkomt..." maxlength="120"
+        style="width:100%;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;resize:none"></textarea>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Bot prioriteit</label>
+      <div style="display:flex;gap:8px">
+        <button class="tf-tab active" id="prio-normal" onclick="setPrio('normal')">Normaal</button>
+        <button class="tf-tab" id="prio-high" onclick="setPrio('high')">Hoog ⚡</button>
+        <button class="tf-tab" id="prio-critical" onclick="setPrio('critical')">Kritisch 🔥</button>
+      </div>
+    </div>
+    <button onclick="saveCustomPattern()" style="width:100%;padding:14px;background:var(--green);border:none;border-radius:12px;color:#000;font-weight:800;font-size:15px;cursor:pointer">✓ Patroon opslaan</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// MARKETS
+// ══════════════════════════════════════════════════════
+const MARKETS={
+  'XAU/USD':  {type:'commodity',base:4210,   vol:0.008,color:'#ffc947'},
+  // Top coins (Image 2)
+  'BTC/EUR':  {type:'crypto',   base:56590,  vol:0.022,color:'#b47aff'},
+  'ETH/EUR':  {type:'crypto',   base:1522.5, vol:0.025,color:'#b47aff'},
+  'SOL/EUR':  {type:'crypto',   base:63.646, vol:0.030,color:'#b47aff'},
+  'XRP/EUR':  {type:'crypto',   base:0.99674,vol:0.028,color:'#b47aff'},
+  'ADA/EUR':  {type:'crypto',   base:0.13910,vol:0.032,color:'#b47aff'},
+  'HYPE/EUR': {type:'crypto',   base:58.746, vol:0.040,color:'#b47aff'},
+  'TAO/EUR':  {type:'crypto',   base:201.00, vol:0.038,color:'#b47aff'},
+  'SYN/EUR':  {type:'crypto',   base:0.21243,vol:0.060,color:'#b47aff'},
+  // Jouw watchlist (Image 1)
+  'XLM/EUR':  {type:'crypto',   base:0.18112,vol:0.030,color:'#b47aff'},
+  'RE/EUR':   {type:'crypto',   base:0.69469,vol:0.045,color:'#b47aff'},
+  'WLD/EUR':  {type:'crypto',   base:0.55951,vol:0.035,color:'#b47aff'},
+  'SUI/EUR':  {type:'crypto',   base:0.63024,vol:0.032,color:'#b47aff'},
+  'FET/EUR':  {type:'crypto',   base:0.15950,vol:0.038,color:'#b47aff'},
+  'ARX/EUR':  {type:'crypto',   base:0.24699,vol:0.042,color:'#b47aff'},
+  'LINK/EUR': {type:'crypto',   base:6.9746, vol:0.028,color:'#b47aff'},
+  'EIGEN/EUR':{type:'crypto',   base:0.25915,vol:0.040,color:'#b47aff'},
+  // Overig
+  'AAPL':     {type:'stock',    base:210,    vol:0.010,color:'#4a9eff'},
+  'EUR/USD':  {type:'forex',    base:1.085,  vol:0.004,color:'#00d4ff'},
+};
+const TYPE_LABEL={commodity:'GOUD',crypto:'CRYPTO',stock:'AANDEEL',forex:'FOREX'};
+
+// ══════════════════════════════════════════════════════
+// BUILT-IN PATTERN DEFINITIONS
+// ══════════════════════════════════════════════════════
+const PATTERN_DEFS={
+  hammer:        {name:'Hammer',           emoji:'🔨',bias:'bull',desc:'Lange onderstaart na daling'},
+  hangingMan:    {name:'Hanging Man',      emoji:'🧟',bias:'bear',desc:'Lange onderstaart na stijging'},
+  doji:          {name:'Doji',             emoji:'✚', bias:'neutral',desc:'Open ≈ close, onzekerheid'},
+  bullEngulf:    {name:'Bullish Engulfing',emoji:'🟢',bias:'bull',desc:'Groen slokt rood op'},
+  bearEngulf:    {name:'Bearish Engulfing',emoji:'🔴',bias:'bear',desc:'Rood slokt groen op'},
+  morningStar:   {name:'Morning Star',     emoji:'🌅',bias:'bull',desc:'3-kaars bodem signaal'},
+  eveningStar:   {name:'Evening Star',     emoji:'🌆',bias:'bear',desc:'3-kaars top signaal'},
+  shootingStar:  {name:'Shooting Star',    emoji:'💫',bias:'bear',desc:'Lange bovenstaart na stijging'},
+  invertedHammer:{name:'Inverted Hammer',  emoji:'🔧',bias:'bull',desc:'Lange bovenstaart na daling'},
+  piercingLine:  {name:'Piercing Line',    emoji:'⚡',bias:'bull',desc:'Groen sluit boven middelpunt rood'},
+  darkCloud:     {name:'Dark Cloud Cover', emoji:'☁️',bias:'bear',desc:'Rood sluit onder middelpunt groen'},
+  spinningTop:   {name:'Spinning Top',     emoji:'🌀',bias:'neutral',desc:'Kleine body, gelijke staarten'},
+};
+
+// ══════════════════════════════════════════════════════
+// CANDLE CONDITION SYSTEM
+// ══════════════════════════════════════════════════════
+// Each candle in a custom sequence has an array of conditions.
+// Conditions are checked against the actual candle properties.
+const CONDITIONS = {
+  // Direction
+  bullish:     {label:'Groen (close>open)',  group:'richting', check:(c)=>c.c>c.o},
+  bearish:     {label:'Rood (close<open)',    group:'richting', check:(c)=>c.c<c.o},
+  // Body size
+  bigBody:     {label:'Grote body (>50%)',   group:'body',  check:(c)=>(Math.abs(c.c-c.o)/(c.h-c.l||1))>0.5},
+  smallBody:   {label:'Kleine body (<20%)',  group:'body',  check:(c)=>(Math.abs(c.c-c.o)/(c.h-c.l||1))<0.2},
+  // Wicks
+  longLowerWick:{label:'Lange onderstaart',  group:'staart',check:(c)=>{const l=Math.min(c.o,c.c)-c.l,b=Math.abs(c.c-c.o);return l>b*1.5;}},
+  longUpperWick:{label:'Lange bovenstaart',  group:'staart',check:(c)=>{const u=c.h-Math.max(c.o,c.c),b=Math.abs(c.c-c.o);return u>b*1.5;}},
+  noUpperWick: {label:'Geen bovenstaart',    group:'staart',check:(c)=>(c.h-Math.max(c.o,c.c))<(Math.abs(c.c-c.o)*0.1)},
+  noLowerWick: {label:'Geen onderstaart',    group:'staart',check:(c)=>(Math.min(c.o,c.c)-c.l)<(Math.abs(c.c-c.o)*0.1)},
+  // Relative to previous
+  highClose:   {label:'Close > vorige close',group:'relatief',check:(c,p)=>p?c.c>p.c:true},
+  lowClose:    {label:'Close < vorige close',group:'relatief',check:(c,p)=>p?c.c<p.c:true},
+  higherHigh:  {label:'Higher high',         group:'relatief',check:(c,p)=>p?c.h>p.h:true},
+  lowerLow:    {label:'Lower low',           group:'relatief',check:(c,p)=>p?c.l<p.l:true},
+  gapUp:       {label:'Gap omhoog (open>prev close)',group:'relatief',check:(c,p)=>p?c.o>p.c:true},
+  gapDown:     {label:'Gap omlaag (open<prev close)',group:'relatief',check:(c,p)=>p?c.o<p.c:true},
+};
+
+const COND_GROUPS=['richting','body','staart','relatief'];
+const COND_GROUP_LABELS={richting:'Richting',body:'Body grootte',staart:'Staarten',relatief:'Relatief'};
+
+// Check a custom pattern against recent candles
+function checkCustomPattern(pat, candleArr){
+  const n=candleArr.length, len=pat.sequence.length;
+  if(n<len) return false;
+  const slice=candleArr.slice(-len);
+  return slice.every((c,i)=>{
+    const conds=pat.sequence[i];
+    const prev=i>0?slice[i-1]:null;
+    return conds.every(condKey=>{
+      const def=CONDITIONS[condKey];
+      return def?def.check(c,prev):true;
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let capital=parseFloat(localStorage.getItem('tb_capital'))||10000;
+let cash=parseFloat(localStorage.getItem('tb_cash'))||capital;
+let prices={},history={},candles={};
+let openPositions=JSON.parse(localStorage.getItem('tb_positions')||'{}');
+let trades=JSON.parse(localStorage.getItem('tb_trades')||'[]');
+let customPatterns=JSON.parse(localStorage.getItem('tb_custom_patterns')||'[]');
+let botActive=false,botLog=[],currentPair='XAU/USD',currentTF='5m';
+// ── Trading modus ─────────────────────────────────────────────
+let tradingMode = localStorage.getItem('tb_mode') || 'paper'; // 'paper' | 'live'
+
+let strategy={
+  indicator:'Combined',
+  rsiOversold:30,rsiOverbought:70,
+  smaFast:20,smaSlow:50,
+  positionSize:10,stopLoss:5,takeProfit:10,
+  markets:['BTC/EUR','ETH/EUR','SOL/EUR','XRP/EUR'],
+  activePatterns:Object.keys(PATTERN_DEFS),
+};
+
+// Builder state
+let builderStep=1, builderSeqLen=3, builderBias='bull', builderPrio='normal';
+let builderSequence=[]; // array of arrays of condition keys per slot
+let selectedSlot=0;
+
+// ══════════════════════════════════════════════════════
+// PRICE SIMULATION
+// ══════════════════════════════════════════════════════
+function genCandle(prev,vol){
+  const chg=(Math.random()-0.49)*vol*prev;
+  const o=prev,c=Math.max(prev*0.5,prev+chg);
+  const h=Math.max(o,c)*(1+Math.random()*vol*0.5);
+  const l=Math.min(o,c)*(1-Math.random()*vol*0.5);
+  return{o,h,l,c};
+}
+Object.entries(MARKETS).forEach(([sym,m])=>{
+  prices[sym]=m.base;history[sym]=[m.base];
+  let p=m.base;candles[sym]=[];
+  for(let i=0;i<100;i++){const cd=genCandle(p,m.vol);candles[sym].push(cd);p=cd.c;}
+});
+function tick(){
+  Object.entries(MARKETS).forEach(([sym,m])=>{
+    const cd=genCandle(prices[sym],m.vol);
+    prices[sym]=cd.c;
+    history[sym]=[...history[sym].slice(-299),cd.c];
+    candles[sym]=[...candles[sym].slice(-299),cd];
+  });
+  updateHeader();renderMarkets();
+  if(document.getElementById('page-analyse').classList.contains('active'))renderAnalyse();
+  if(document.getElementById('page-bot').classList.contains('active'))renderBot();
+  runBot();
+  const ti=document.getElementById('tick-indicator');
+  if(ti){ti.style.color='#00d68f';setTimeout(()=>ti.style.color='var(--sub)',400);}
+}
+setInterval(tick,1500);
+
+// ══════════════════════════════════════════════════════
+// TECHNICAL INDICATORS
+// ══════════════════════════════════════════════════════
+function sma(arr,n){if(arr.length<n)return null;return arr.slice(-n).reduce((a,b)=>a+b,0)/n;}
+function rsiCalc(arr,n=14){
+  if(arr.length<n+1)return null;
+  const ch=arr.slice(-n-1).map((v,i,a)=>i>0?v-a[i-1]:0).slice(1);
+  const g=ch.filter(c=>c>0).reduce((a,b)=>a+b,0)/n;
+  const l=Math.abs(ch.filter(c=>c<0).reduce((a,b)=>a+b,0))/n;
+  return l===0?100:100-100/(1+g/l);
+}
+function getInd(sym){
+  const h=history[sym]||[];
+  return{rsi:rsiCalc(h),sma20:sma(h,20),sma50:sma(h,50)};
+}
+
+// ══════════════════════════════════════════════════════
+// BUILT-IN PATTERN DETECTION
+// ══════════════════════════════════════════════════════
+function detectBuiltIn(cdArr){
+  const found=[],n=cdArr.length;
+  if(n<3)return found;
+  const c=cdArr[n-1],p1=cdArr[n-2],p2=cdArr[n-3];
+  const body=cd=>Math.abs(cd.c-cd.o),range=cd=>cd.h-cd.l;
+  const upper=cd=>cd.h-Math.max(cd.o,cd.c),lower=cd=>Math.min(cd.o,cd.c)-cd.l;
+  const isUp=cd=>cd.c>=cd.o,isDown=cd=>cd.c<cd.o;
+  const bPct=cd=>range(cd)>0?body(cd)/range(cd):0;
+  if(bPct(c)<0.1&&range(c)>0)found.push('doji');
+  if(bPct(c)<0.25&&upper(c)>body(c)&&lower(c)>body(c)&&!found.includes('doji'))found.push('spinningTop');
+  if(isDown(p1)&&isDown(p2)&&lower(c)>=body(c)*2&&upper(c)<=body(c)*0.5&&body(c)>0)found.push('hammer');
+  if(isUp(p1)&&isUp(p2)&&lower(c)>=body(c)*2&&upper(c)<=body(c)*0.5&&body(c)>0)found.push('hangingMan');
+  if(isUp(p1)&&isUp(p2)&&upper(c)>=body(c)*2&&lower(c)<=body(c)*0.5&&body(c)>0)found.push('shootingStar');
+  if(isDown(p1)&&isDown(p2)&&upper(c)>=body(c)*2&&lower(c)<=body(c)*0.5&&body(c)>0)found.push('invertedHammer');
+  if(isDown(p1)&&isUp(c)&&c.o<p1.c&&c.c>p1.o)found.push('bullEngulf');
+  if(isUp(p1)&&isDown(c)&&c.o>p1.c&&c.c<p1.o)found.push('bearEngulf');
+  if(isDown(p1)&&isUp(c)){const mid=p1.o-body(p1)/2;if(c.o<p1.l&&c.c>mid&&c.c<p1.o)found.push('piercingLine');}
+  if(isUp(p1)&&isDown(c)){const mid=p1.c-body(p1)/2;if(c.o>p1.h&&c.c<mid&&c.c>p1.o)found.push('darkCloud');}
+  if(isDown(p2)&&bPct(p1)<0.3&&isUp(c)&&body(c)>body(p2)*0.5)found.push('morningStar');
+  if(isUp(p2)&&bPct(p1)<0.3&&isDown(c)&&body(c)>body(p2)*0.5)found.push('eveningStar');
+  return[...new Set(found)];
+}
+function patternBias(pats){
+  let b=0,r=0;
+  pats.forEach(p=>{
+    const d=PATTERN_DEFS[p];if(!d)return;
+    if(d.bias==='bull')b+=(p==='bullEngulf'||p==='morningStar'||p==='piercingLine'?2:1);
+    if(d.bias==='bear')r+=(p==='bearEngulf'||p==='eveningStar'||p==='darkCloud'?2:1);
+  });
+  return{bull:b,bear:r};
+}
+
+// Check all active custom patterns
+function detectCustom(sym){
+  const cdArr=candles[sym]||[];
+  return customPatterns.filter(p=>p.active!==false&&checkCustomPattern(p,cdArr));
+}
+
+// ══════════════════════════════════════════════════════
+// SIGNAL ENGINE
+// ══════════════════════════════════════════════════════
+function getSignal(sym){
+  const ind=getInd(sym);
+  const builtIn=detectBuiltIn(candles[sym]||[]);
+  const custom=detectCustom(sym);
+  const activePats=builtIn.filter(p=>strategy.activePatterns.includes(p));
+  const pb=patternBias(activePats);
+  let bull=0,bear=0,reasons=[];
+
+  // RSI
+  if(ind.rsi!=null&&(strategy.indicator==='RSI'||strategy.indicator==='Combined')){
+    if(ind.rsi<strategy.rsiOversold){bull+=2;reasons.push(`RSI ${ind.rsi.toFixed(0)} oversold`);}
+    else if(ind.rsi>strategy.rsiOverbought){bear+=2;reasons.push(`RSI ${ind.rsi.toFixed(0)} overbought`);}
+    else reasons.push(`RSI ${ind.rsi.toFixed(0)}`);
+  }
+  // MA
+  if(ind.sma20&&ind.sma50&&(strategy.indicator==='MA'||strategy.indicator==='Combined')){
+    if(ind.sma20>ind.sma50){bull++;reasons.push('MA20>MA50');}else{bear++;reasons.push('MA20<MA50');}
+  }
+  // Built-in patterns
+  if(strategy.indicator==='Pattern'||strategy.indicator==='Combined'){
+    bull+=pb.bull;bear+=pb.bear;
+    if(activePats.length)reasons.push(activePats.map(p=>PATTERN_DEFS[p]?.emoji).join(''));
+  }
+  // Custom patterns — weighted by priority
+  custom.forEach(cp=>{
+    const w=cp.priority==='critical'?4:cp.priority==='high'?2:1;
+    if(cp.bias==='bull'){bull+=w;reasons.push(`🎯 ${cp.name}`);}
+    else if(cp.bias==='bear'){bear+=w;reasons.push(`🎯 ${cp.name}`);}
+  });
+
+  let signal,color,icon;
+  if(bull>bear+1){signal='KOPEN';color='var(--green)';icon='🟢';}
+  else if(bear>bull+1){signal='VERKOPEN';color='var(--red)';icon='🔴';}
+  else{signal='NEUTRAAL';color='var(--amber)';icon='🟡';}
+  return{signal,color,icon,reasons,ind,patterns:builtIn,custom};
+}
+
+// ══════════════════════════════════════════════════════
+// FORMATTING
+// ══════════════════════════════════════════════════════
+function fmt(n,d=2){if(n==null||isNaN(n))return'—';return n.toLocaleString('nl-NL',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtP(p){if(!p)return'—';return p>=100?'$'+fmt(p,2):p>=1?'$'+fmt(p,3):'$'+fmt(p,5);}
+function fmtPct(n){if(n==null)return'—';return(n>=0?'+':'')+fmt(n)+'%';}
+function totalValue(){let v=cash;Object.entries(openPositions).forEach(([s,pos])=>{v+=pos.qty*(prices[s]||pos.entryPrice);});return v;}
+
+// ══════════════════════════════════════════════════════
+// RENDER HEADER
+// ══════════════════════════════════════════════════════
+function updateHeader(){
+  const tv=totalValue(),pnl=tv-capital,pct=(pnl/capital)*100;
+  document.getElementById('hdr-val').textContent='€'+fmt(tv);
+  const p=document.getElementById('hdr-pnl');
+  p.textContent=(pnl>=0?'+':'')+'$'+fmt(pnl)+' ('+fmtPct(pct)+')';
+  p.style.color=pnl>=0?'var(--green)':'var(--red)';
+  document.getElementById('hdr-cash').textContent='€'+fmt(cash);
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER MARKETS
+// ══════════════════════════════════════════════════════
+function sparkSVG(arr,color,w=60,h=28){
+  if(!arr||arr.length<2)return'';
+  const mn=Math.min(...arr),mx=Math.max(...arr),r=mx-mn||1;
+  const pts=arr.map((p,i)=>`${(i/(arr.length-1))*w},${h-((p-mn)/r)*h}`).join(' ');
+  return`<svg width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+}
+function renderMarkets(){
+  const el=document.getElementById('markets-list');if(!el)return;
+  el.innerHTML=Object.entries(MARKETS).map(([sym,m])=>{
+    const p=prices[sym]||m.base,h=history[sym]||[];
+    const prev=h[h.length-2]||p,chg=((p-prev)/prev)*100;
+    const custom=detectCustom(sym);
+    const bi=detectBuiltIn(candles[sym]||[]).filter(x=>strategy.activePatterns.includes(x));
+    const allPats=[...bi.map(p2=>PATTERN_DEFS[p2]?.emoji||''),...custom.map(c=>(c.emoji||'🎯'))];
+    const patBadge=allPats.length?`<span style="font-size:12px">${allPats.join('')}</span>`:'';
+    return`<div class="market-row" onclick="openAnalyse('${sym}')">
+      <div><div style="font-weight:700;font-size:15px">${sym==='XAU/USD'?'🥇 ':''} ${sym} ${patBadge}</div>
+      <span style="font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;background:${m.color}22;color:${m.color}">${TYPE_LABEL[m.type]}</span></div>
+      <div style="margin:0 8px">${sparkSVG(h.slice(-20),chg>=0?'#00d68f':'#ff4757')}</div>
+      <div><div style="font-weight:700;font-size:15px;text-align:right">${fmtP(p)}</div>
+      <div style="font-size:11px;text-align:right;color:${chg>=0?'var(--green)':'var(--red)'}">${fmtPct(chg)}</div></div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER ANALYSE
+// ══════════════════════════════════════════════════════
+function openAnalyse(sym){currentPair=sym;showPage('analyse',document.querySelectorAll('.nav-btn')[1]);renderAnalyse();}
+function renderAnalyse(){
+  const sym=currentPair;
+  document.getElementById('analyse-title').textContent=sym==='XAU/USD'?'🥇 '+sym:sym;
+  const tfs=['5m','1h','1d','1w'],tfL={'5m':'5min','1h':'1uur','1d':'Dag','1w':'Week'};
+  document.getElementById('tf-summary').innerHTML=tfs.map(t=>{
+    const s=getSignal(sym);
+    return`<div class="summary-tf-item" style="border-color:${t===currentTF?'var(--blue)':'var(--border)'}" onclick="setTF('${t}')">
+      <div class="summary-tf-label">${tfL[t]}</div>
+      <div class="summary-tf-signal" style="color:${s.color}">${s.icon} ${s.signal}</div></div>`;
+  }).join('');
+  const sig=getSignal(sym);
+  const sb=document.getElementById('signal-box');
+  sb.innerHTML=`<div style="font-size:28px">${sig.icon}</div>
+    <div><div style="font-size:18px;font-weight:800;color:${sig.color}">${sig.signal}</div>
+    <div style="font-size:12px;color:var(--sub)">${sig.reasons.slice(0,3).join(' · ')}</div></div>`;
+  sb.style.background=sig.color+'15';sb.style.border='1px solid '+sig.color+'44';
+
+  // Detected patterns
+  const patEl=document.getElementById('detected-patterns');
+  const allPats=[
+    ...sig.patterns.filter(p=>strategy.activePatterns.includes(p)).map(p=>({key:p,...PATTERN_DEFS[p],isCustom:false})),
+    ...sig.custom.map(c=>({...c,isCustom:true,bias:c.bias}))
+  ];
+  if(allPats.length===0){
+    patEl.innerHTML='<div style="color:var(--dim);font-size:13px">Geen patronen herkend</div>';
+  } else {
+    patEl.innerHTML=allPats.map(p=>{
+      const c=p.bias==='bull'?'var(--green)':p.bias==='bear'?'var(--red)':'var(--amber)';
+      const tag=p.isCustom?`<span style="font-size:9px;background:var(--purple)22;color:var(--purple);padding:2px 6px;border-radius:4px;font-weight:700">EIGEN</span>`:'';
+      const prio=p.priority==='critical'?'🔥':p.priority==='high'?'⚡':'';
+      return`<div style="background:${c}15;border:1px solid ${c}33;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;color:${c}">${p.emoji||'📊'} ${p.name} ${prio}</span>
+          <span style="display:flex;gap:4px;align-items:center">${tag}<span style="font-size:10px;color:${c};background:${c}22;padding:2px 6px;border-radius:4px">${p.bias.toUpperCase()}</span></span>
+        </div>
+        ${p.desc?`<div style="font-size:11px;color:var(--sub);margin-top:3px">${p.desc}</div>`:''}
+      </div>`;
+    }).join('');
+  }
+
+  drawCandleChart(sym, sig.patterns);
+
+  // Indicators
+  const ind=sig.ind;
+  document.getElementById('indicators-list').innerHTML=[
+    ['RSI (14)',ind.rsi!=null?fmt(ind.rsi,1):'—',ind.rsi!=null?(ind.rsi<35?'var(--green)':ind.rsi>65?'var(--red)':'var(--text)'):'var(--dim)'],
+    ['SMA 20',ind.sma20?'$'+fmt(ind.sma20):'—','var(--text)'],
+    ['SMA 50',ind.sma50?'$'+fmt(ind.sma50):'—','var(--text)'],
+    ['Patronen',allPats.length?allPats.length+' herkend':'geen',allPats.length?'var(--amber)':'var(--dim)'],
+    ['Eigen patronen',sig.custom.length?sig.custom.map(c=>c.name).join(', '):'geen',sig.custom.length?'var(--purple)':'var(--dim)'],
+    ['Prijs',fmtP(prices[sym]),'var(--text)'],
+  ].map(([n,v,c])=>`<div class="ind-row"><span class="ind-name">${n}</span><span style="font-weight:600;color:${c}">${v}</span></div>`).join('');
+
+  const sel=document.getElementById('analyse-pair');
+  if(sel.dataset.built!=='1'){
+    sel.innerHTML=Object.keys(MARKETS).map(s=>`<option value="${s}">${s}</option>`).join('');
+    sel.onchange=e=>{currentPair=e.target.value;renderAnalyse();};
+    sel.dataset.built='1';
+  }
+  sel.value=sym;
+}
+
+// ══════════════════════════════════════════════════════
+// CANDLE CHART
+// ══════════════════════════════════════════════════════
+function drawCandleChart(sym,patterns){
+  const canvas=document.getElementById('candle-chart');if(!canvas)return;
+  const ctx=canvas.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth-16,H=160;
+  canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';
+  ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
+  const data=(candles[sym]||[]).slice(-50);if(data.length<2)return;
+  const allH=data.map(c=>c.h),allL=data.map(c=>c.l);
+  const maxP=Math.max(...allH),minP=Math.min(...allL),range=maxP-minP||1;
+  const padT=12,padB=18,chartH=H-padT-padB,toY=p=>padT+chartH-((p-minP)/range)*chartH;
+  const cw=W/data.length,gap=Math.max(0.5,cw*0.15);
+  data.forEach((c,i)=>{
+    const x=i*cw,isUp=c.c>=c.o,col=isUp?'#00d68f':'#ff4757';
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.globalAlpha=0.85;
+    const cx=x+cw/2;
+    ctx.beginPath();ctx.moveTo(cx,toY(c.h));ctx.lineTo(cx,toY(c.l));ctx.lineWidth=1;ctx.stroke();
+    const bT=toY(Math.max(c.o,c.c)),bB=toY(Math.min(c.o,c.c));
+    ctx.fillRect(x+gap,bT,Math.max(1,cw-gap*2),Math.max(1,bB-bT));
+  });
+  ctx.globalAlpha=1;
+  if(patterns&&patterns.length){
+    const pb=patternBias(patterns.filter(p=>strategy.activePatterns.includes(p)));
+    const mc=pb.bull>pb.bear?'#00d68f':pb.bear>pb.bull?'#ff4757':'#ffaa00';
+    const x0=(data.length-3)*cw,xE=data.length*cw,yB=H-padB+2;
+    ctx.strokeStyle=mc;ctx.lineWidth=2;ctx.globalAlpha=0.9;
+    ctx.beginPath();ctx.moveTo(x0,yB-4);ctx.lineTo(x0,yB);ctx.lineTo(xE,yB);ctx.lineTo(xE,yB-4);ctx.stroke();
+    const label=patterns.slice(0,4).map(p=>PATTERN_DEFS[p]?.emoji||'').join('');
+    ctx.fillStyle=mc;ctx.font=`bold 10px -apple-system`;ctx.textAlign='center';ctx.globalAlpha=1;
+    ctx.fillText(label,(x0+xE)/2,yB+12);
+  }
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#4a5568';ctx.font='9px -apple-system';ctx.textAlign='left';
+  ctx.fillText('$'+fmt(maxP,maxP>100?0:4),2,padT+8);
+  ctx.fillText('$'+fmt(minP,minP>100?0:4),2,H-padB+4);
+}
+function setTF(tf){
+  currentTF=tf;
+  document.querySelectorAll('.tf-tab[data-tf]').forEach(t=>t.classList.toggle('active',t.dataset.tf===tf));
+  renderAnalyse();
+}
+
+// ══════════════════════════════════════════════════════
+// BOT
+// ══════════════════════════════════════════════════════
+function runBot(){
+  if(!botActive)return;
+  strategy.markets.forEach(sym=>{
+    const price=prices[sym];if(!price)return;
+    const pos=openPositions[sym];
+    if(pos){
+      const pct=((price-pos.entryPrice)/pos.entryPrice)*100;
+      if(pct<=-strategy.stopLoss)executeSell(sym,price,pos,'Stop-Loss');
+      else if(pct>=strategy.takeProfit)executeSell(sym,price,pos,'Take-Profit');
+      return;
+    }
+    const sig=getSignal(sym);
+    const custom=detectCustom(sym);
+    const hasCritical=custom.some(c=>c.priority==='critical');
+    let shouldBuy=false,reason='';
+    if(hasCritical&&sig.signal!=='VERKOPEN'){shouldBuy=true;reason='🔥 '+custom.find(c=>c.priority==='critical').name;}
+    else if(sig.signal==='KOPEN'){shouldBuy=true;reason=sig.reasons[0]||'Signaal';}
+    if(shouldBuy){
+      const spend=cash*(strategy.positionSize/100);if(spend<1)return;
+      cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
+      addTrade({sym,side:'BUY',qty:spend/price,price,reason});
+      const modeTag=tradingMode==='paper'?'📄':'💶';
+      addLog(`🟢 ${modeTag} BUY ${sym} @ €${fmt(price)} — ${reason}`);
+      toast(`${modeTag} BUY ${sym}`,'#00d68f');save();
+    }
+  });
+}
+function executeSell(sym,price,pos,reason){
+  const pnl=pos.qty*price-pos.qty*pos.entryPrice;
+  cash+=pos.qty*price;delete openPositions[sym];
+  addTrade({sym,side:'SELL',qty:pos.qty,price,pnl,reason});
+  addLog(`${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(price)} — ${reason}`);
+  toast(`${reason}: ${sym} ${pnl>=0?'+':''}$${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
+  save();
+}
+function addTrade(t){trades.unshift({...t,ts:new Date().toLocaleTimeString('nl-NL')});trades=trades.slice(0,300);renderTrades();}
+function addLog(msg){botLog.unshift({msg,ts:new Date().toLocaleTimeString('nl-NL')});botLog=botLog.slice(0,100);}
+function manualBuy(){
+  const sym=currentPair,price=prices[sym];if(!price)return;
+  const spend=cash*(strategy.positionSize/100);if(spend<1){toast('Niet genoeg cash','#ff4757');return;}
+  cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
+  addTrade({sym,side:'BUY',qty:spend/price,price,reason:'Handmatig'});
+  addLog(`🟢 HANDMATIG BUY ${sym} @ €${fmt(price)}`);toast(`BUY ${sym}`,'#00d68f');save();
+}
+function manualSell(){
+  const sym=currentPair,pos=openPositions[sym];
+  if(!pos){toast('Geen open positie','#ff4757');return;}
+  executeSell(sym,prices[sym],pos,'Handmatig');
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER BOT
+// ══════════════════════════════════════════════════════
+function renderBot(){
+  const isPaper = tradingMode === 'paper';
+  const btn=document.getElementById('toggle-bot-btn');
+  const dot=document.getElementById('bot-dot'),lbl=document.getElementById('bot-label');
+  if(botActive){
+    btn.textContent='⏹ Stop bot';btn.style.background='var(--red)';btn.style.color='#fff';
+    dot.style.background='var(--green)';dot.style.boxShadow='0 0 6px var(--green)';
+    lbl.textContent='Bot actief';lbl.style.color='var(--green)';
+  } else {
+    btn.textContent='▶ Start bot';btn.style.background='var(--green)';btn.style.color='#000';
+    dot.style.background='var(--dim)';dot.style.boxShadow='none';
+    lbl.textContent='Bot uit';lbl.style.color='var(--dim)';
+  }
+
+  // Mode UI
+  const modeLbl = document.getElementById('bot-mode-label');
+  if(modeLbl){
+    modeLbl.textContent = isPaper ? '📄 PAPER modus' : '💶 LIVE modus';
+    modeLbl.style.background = isPaper ? '#0d2b1a' : '#2a0d0d';
+    modeLbl.style.color = isPaper ? 'var(--green)' : 'var(--red)';
+  }
+  const modeP = document.getElementById('mode-paper');
+  const modeL = document.getElementById('mode-live');
+  if(modeP) { modeP.style.borderColor=isPaper?'var(--green)':'var(--border)'; modeP.style.opacity=isPaper?'1':'0.5'; modeP.style.background=isPaper?'var(--green)15':'var(--panel2)'; }
+  if(modeL) { modeL.style.borderColor=!isPaper?'var(--red)':'var(--border)'; modeL.style.opacity=!isPaper?'1':'0.5'; modeL.style.background=!isPaper?'var(--red)15':'var(--panel2)'; }
+  const modeInfo = document.getElementById('mode-info');
+  if(modeInfo){
+    if(isPaper){
+      modeInfo.style.background='#0d2b1a'; modeInfo.style.borderColor='var(--green)33'; modeInfo.style.color='var(--green)';
+      modeInfo.innerHTML='📄 <b>Paper modus</b> — nep geld, geen enkel risico.' + (window._bvConnected?' Bitvavo live prijzen actief.':' Simulatie prijzen.');
+    } else {
+      modeInfo.style.background='#2a0d0d'; modeInfo.style.borderColor='var(--red)33'; modeInfo.style.color='var(--red)';
+      modeInfo.innerHTML='⚠️ <b>Live modus</b> — echte orders op Bitvavo!' + (window._bvConnected?' Verbonden.':' ⚠️ Bitvavo niet verbonden!');
+    }
+  }
+  const paperCapRow = document.getElementById('paper-capital-row');
+  if(paperCapRow) paperCapRow.style.display = isPaper ? 'block' : 'none';
+
+  // Paper stats
+  const tv=totalValue(), pnl=tv-capital, pct=(pnl/capital)*100;
+  const winTrades=trades.filter(t=>(t.pnl||0)>0);
+  const loseTrades=trades.filter(t=>(t.pnl||0)<0&&t.pnl!=null);
+  const totalPnl=trades.filter(t=>t.pnl!=null).reduce((a,t)=>a+(t.pnl||0),0);
+  const ps=document.getElementById('paper-stats');
+  if(ps) ps.innerHTML=[
+    ['Portfolio waarde', `€${fmt(tv)}`, tv>=capital?'var(--green)':'var(--red)'],
+    ['Totaal P&L', `${pnl>=0?'+':''}€${fmt(pnl)} (${fmtPct(pct)})`, pnl>=0?'var(--green)':'var(--red)'],
+    ['Cash beschikbaar', `€${fmt(cash)}`, 'var(--text)'],
+    ['Winstgevende trades', `${winTrades.length}`, 'var(--green)'],
+    ['Verliesgevende trades', `${loseTrades.length}`, 'var(--red)'],
+    ['Win rate', trades.filter(t=>t.pnl!=null).length>0?fmt((winTrades.length/trades.filter(t=>t.pnl!=null).length)*100,1)+'%':'—', 'var(--text)'],
+    ['Modus', isPaper?'📄 Paper (nep geld)':'💶 Live (echt geld)', isPaper?'var(--green)':'var(--red)'],
+    ['Prijzen', window._bvConnected?'📡 Bitvavo live':'🔮 Simulatie', window._bvConnected?'var(--green)':'var(--amber)'],
+  ].map(([n,v,c])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+    <span style="color:var(--sub)">${n}</span><span style="font-weight:600;color:${c}">${v}</span></div>`).join('');
+
+  // Open posities
+  const keys=Object.keys(openPositions);
+  document.getElementById('open-positions').innerHTML=keys.length===0
+    ?'<div style="color:var(--dim);font-size:13px">Geen open posities</div>'
+    :keys.map(sym=>{
+      const pos=openPositions[sym],price=prices[sym]||pos.entryPrice;
+      const pnl2=(price-pos.entryPrice)*pos.qty,pct2=((price-pos.entryPrice)/pos.entryPrice)*100;
+      return`<div class="pos-row">
+        <div><div style="font-weight:700;font-size:14px">${sym}</div>
+        <div style="font-size:11px;color:var(--sub)">${fmt(pos.qty,4)} @ €${fmt(pos.entryPrice)}</div></div>
+        <div style="text-align:right">
+          <div style="color:${pnl2>=0?'var(--green)':'var(--red)'};font-weight:700">${pnl2>=0?'+':''}€${fmt(pnl2)}</div>
+          <div style="font-size:11px;color:${pnl2>=0?'var(--green)':'var(--red)'}">${fmtPct(pct2)}</div>
+        </div></div>`;
+    }).join('');
+
+  document.getElementById('bot-log').innerHTML=botLog.length===0
+    ?'<div style="color:var(--dim);font-size:12px">Start de bot...</div>'
+    :botLog.map(l=>`<div class="log-line"><span style="color:var(--dim);margin-right:6px">${l.ts}</span>${l.msg}</div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER TRADES
+// ══════════════════════════════════════════════════════
+function renderTrades(){
+  const el=document.getElementById('trades-list'),st=document.getElementById('trades-stats');
+  const wins=trades.filter(t=>(t.pnl||0)>0).length,total=trades.filter(t=>t.pnl!=null).length;
+  if(st)st.textContent=total>0?`${wins}/${total} winstgevend`:'';
+  if(!el)return;
+  el.innerHTML=trades.length===0?'<div style="color:var(--dim);font-size:13px">Nog geen trades.</div>':
+    trades.map(t=>`<div class="trade-row">
+      <div><div style="font-weight:700;font-size:13px">${t.sym}</div><div style="font-size:10px;color:var(--sub)">${t.ts} · ${t.reason}</div></div>
+      <div style="text-align:center"><span style="color:${t.side==='BUY'?'var(--green)':'var(--red)'};font-weight:800;font-size:13px">${t.side}</span></div>
+      <div style="text-align:right"><div style="font-size:13px">€${fmt(t.price)}</div><div style="font-size:12px;color:${(t.pnl||0)>=0?'var(--green)':'var(--red)'}">${t.pnl!=null?(t.pnl>=0?'+':'')+'€'+fmt(t.pnl):'—'}</div></div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER PATTERNS PAGE
+// ══════════════════════════════════════════════════════
+function renderPatternsPage(){
+  renderCustomPatternsList();
+  renderPatternToggles();
+}
+function renderCustomPatternsList(){
+  const el=document.getElementById('custom-patterns-list');if(!el)return;
+  if(customPatterns.length===0){
+    el.innerHTML='<div style="color:var(--dim);font-size:13px">Nog geen eigen patronen. Tik "+ Nieuw" om er een te maken.</div>';
+    return;
+  }
+  el.innerHTML=customPatterns.map((p,i)=>{
+    const c=p.bias==='bull'?'var(--green)':p.bias==='bear'?'var(--red)':'var(--amber)';
+    const prioLabel=p.priority==='critical'?'🔥 Kritisch':p.priority==='high'?'⚡ Hoog':'Normaal';
+    const seqPreview=p.sequence.map((conds,si)=>{
+      const isBull=conds.includes('bullish'),isBear=conds.includes('bearish');
+      const isBig=conds.includes('bigBody'),isSmall=conds.includes('smallBody');
+      const emoji=isBull?'🟩':isBear?'🟥':'⬜';
+      return`<span title="${conds.join(', ')}">${emoji}</span>`;
+    }).join(' → ');
+    const active=p.active!==false;
+    return`<div class="custom-pat" style="border-color:${active?c+'44':'var(--border)'}">
+      <div class="custom-pat-header">
+        <div><span style="font-weight:700;font-size:14px;color:${active?c:'var(--sub)'}">${p.emoji||'📊'} ${p.name}</span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <div onclick="toggleCustomPat(${i})" style="width:36px;height:20px;border-radius:10px;background:${active?c:'var(--border)'};position:relative;cursor:pointer;transition:all 0.2s">
+            <div style="position:absolute;top:2px;left:${active?'16px':'2px'};width:16px;height:16px;border-radius:50%;background:${active?'#000':'var(--sub)'};transition:all 0.2s"></div>
+          </div>
+          <button class="del-btn" onclick="deleteCustomPat(${i})">✕</button>
+        </div>
+      </div>
+      <div style="font-size:14px;margin:4px 0">${seqPreview}</div>
+      <div style="display:flex;gap:8px;font-size:11px;color:var(--sub)">
+        <span style="color:${c}">${p.bias==='bull'?'BULLISH':'BEARISH'}</span>
+        <span>${p.sequence.length} kaarsen</span>
+        <span>${prioLabel}</span>
+      </div>
+      ${p.desc?`<div style="font-size:11px;color:var(--sub);margin-top:4px">${p.desc}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function toggleCustomPat(i){customPatterns[i].active=customPatterns[i].active===false?true:false;save();renderCustomPatternsList();}
+function deleteCustomPat(i){if(confirm('Patroon verwijderen?')){customPatterns.splice(i,1);save();renderCustomPatternsList();}}
+
+function renderPatternToggles(){
+  const el=document.getElementById('pattern-toggles');if(!el)return;
+  el.innerHTML=Object.entries(PATTERN_DEFS).map(([key,def])=>{
+    const a=strategy.activePatterns.includes(key);
+    const c=def.bias==='bull'?'var(--green)':def.bias==='bear'?'var(--red)':'var(--amber)';
+    return`<div onclick="toggleBuiltIn('${key}')" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer">
+      <div><div style="font-weight:600;font-size:13px">${def.emoji} ${def.name}</div><div style="font-size:11px;color:var(--sub)">${def.desc}</div></div>
+      <div style="width:40px;height:22px;border-radius:11px;background:${a?c:'var(--border)'};position:relative;min-width:40px;transition:all 0.2s">
+        <div style="position:absolute;top:3px;left:${a?'19px':'3px'};width:16px;height:16px;border-radius:50%;background:${a?'#000':'var(--sub)'};transition:all 0.2s"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleBuiltIn(key){
+  strategy.activePatterns=strategy.activePatterns.includes(key)?strategy.activePatterns.filter(p=>p!==key):[...strategy.activePatterns,key];
+  renderPatternToggles();
+}
+
+// ══════════════════════════════════════════════════════
+// PATTERN BUILDER MODAL
+// ══════════════════════════════════════════════════════
+function openBuilder(){
+  builderStep=1;builderSeqLen=3;builderBias='bull';builderPrio='normal';
+  builderSequence=Array.from({length:3},()=>[]);selectedSlot=0;
+  document.getElementById('pat-name').value='';
+  document.getElementById('pat-emoji').value='';
+  document.getElementById('pat-desc').value='';
+  document.getElementById('modal-overlay').classList.add('open');
+  renderBuilderStep();
+}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
+
+function renderBuilderStep(){
+  [1,2,3].forEach(s=>document.getElementById('step-'+s).style.display=s===builderStep?'block':'none');
+  const dots=document.getElementById('step-dots');
+  dots.innerHTML=[1,2,3].map(s=>`<div class="step-dot ${s===builderStep?'active':''}"></div>`).join('');
+  document.getElementById('modal-title').textContent=['','Basisinformatie','Kaars voorwaarden','Opslaan'][builderStep];
+  if(builderStep===2)renderCandleBuilder();
+  if(builderStep===3)renderFinalPreview();
+}
+
+function goStep(n){
+  if(n===2){
+    const name=document.getElementById('pat-name').value.trim();
+    if(!name){toast('Geef je patroon een naam','#ff4757');return;}
+    if(!builderBias){toast('Kies een richting','#ff4757');return;}
+  }
+  builderStep=n;renderBuilderStep();
+}
+
+function setBias(b){
+  builderBias=b;
+  document.getElementById('bias-bull').classList.toggle('active',b==='bull');
+  document.getElementById('bias-bear').classList.toggle('active',b==='bear');
+}
+function setSeqLen(n){
+  builderSeqLen=n;
+  // resize sequence array
+  while(builderSequence.length<n)builderSequence.push([]);
+  builderSequence=builderSequence.slice(0,n);
+  [1,2,3,4,5].forEach(i=>document.getElementById('len-'+i)?.classList.toggle('active',i===n));
+  if(selectedSlot>=n)selectedSlot=n-1;
+}
+function setPrio(p){
+  builderPrio=p;
+  ['normal','high','critical'].forEach(x=>document.getElementById('prio-'+x)?.classList.toggle('active',x===p));
+}
+
+// Candle mini SVG for builder
+function miniCandleSVG(conds,selected,w=48,h=60){
+  const isBull=conds.includes('bullish');
+  const isBear=conds.includes('bearish');
+  const isBig=conds.includes('bigBody');
+  const isSmall=conds.includes('smallBody');
+  const hasLongLow=conds.includes('longLowerWick');
+  const hasLongUp=conds.includes('longUpperWick');
+  const col=isBull?'#00d68f':isBear?'#ff4757':'#8892a4';
+  const bodyH=isBig?26:isSmall?8:16;
+  const bodyY=h/2-bodyH/2;
+  const wickTop=hasLongUp?8:bodyY-4;
+  const wickBot=hasLongLow?h-8:bodyY+bodyH+4;
+  const cx=w/2;
+  const border=selected?`<rect x="1" y="1" width="${w-2}" height="${h-2}" rx="6" fill="none" stroke="#4a9eff" stroke-width="2"/>`:'';
+  return`<svg width="${w}" height="${h}" style="display:block">${border}
+    <line x1="${cx}" y1="${wickTop}" x2="${cx}" y2="${bodyY}" stroke="${col}" stroke-width="1.5"/>
+    <rect x="${cx-7}" y="${bodyY}" width="14" height="${bodyH}" rx="2" fill="${col}" opacity="${isBull||isBear?0.9:0.4}"/>
+    <line x1="${cx}" y1="${bodyY+bodyH}" x2="${cx}" y2="${wickBot}" stroke="${col}" stroke-width="1.5"/>
+  </svg>`;
+}
+
+function renderCandleBuilder(){
+  const cont=document.getElementById('builder-candles');
+  cont.innerHTML=builderSequence.map((conds,i)=>`
+    <div class="builder-slot" onclick="selectSlot(${i})">
+      <div style="font-size:10px;color:${i===selectedSlot?'var(--blue)':'var(--sub)'};font-weight:700">K${i+1}</div>
+      ${miniCandleSVG(conds,i===selectedSlot)}
+      <div style="font-size:9px;color:var(--dim);text-align:center;max-width:50px;word-break:break-all">${conds.length>0?conds.length+' regels':'Alles'}</div>
+    </div>`).join('');
+  renderCondEditor();
+}
+function selectSlot(i){selectedSlot=i;renderCandleBuilder();}
+
+function renderCondEditor(){
+  const conds=builderSequence[selectedSlot]||[];
+  const el=document.getElementById('candle-editor');
+  el.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">Kaars ${selectedSlot+1} — voorwaarden (leeg = geen beperking)</div>`+
+    COND_GROUPS.map(group=>{
+      const items=Object.entries(CONDITIONS).filter(([,d])=>d.group===group);
+      return`<div style="margin-bottom:8px">
+        <div style="font-size:10px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px">${COND_GROUP_LABELS[group]}</div>
+        <div class="cond-grid">${items.map(([key,def])=>`
+          <div class="cond-pill ${conds.includes(key)?'sel':''}" onclick="toggleCond(${selectedSlot},'${key}')">${def.label}</div>
+        `).join('')}</div>
+      </div>`;
+    }).join('');
+}
+function toggleCond(slot,key){
+  const c=builderSequence[slot];
+  const idx=c.indexOf(key);
+  if(idx>=0)c.splice(idx,1);else c.push(key);
+  renderCandleBuilder();
+}
+
+function renderFinalPreview(){
+  const name=document.getElementById('pat-name').value.trim();
+  const el=document.getElementById('pat-preview-final');
+  const seqHTML=builderSequence.map((conds,i)=>{
+    const isBull=conds.includes('bullish'),isBear=conds.includes('bearish');
+    const emoji=isBull?'🟩':isBear?'🟥':'⬜';
+    const condLabels=conds.map(k=>CONDITIONS[k]?.label||k).join(', ')||'Geen beperking';
+    return`<div style="margin-bottom:6px">
+      <span style="font-size:18px">${emoji}</span>
+      <span style="font-size:12px;color:var(--sub);margin-left:4px">K${i+1}: ${condLabels}</span>
+    </div>`;
+  }).join('');
+  const c=builderBias==='bull'?'var(--green)':'var(--red)';
+  el.innerHTML=`<div style="font-size:15px;font-weight:800;color:${c};margin-bottom:8px">${name}</div>
+    <div style="font-size:11px;color:${c};background:${c}22;padding:4px 10px;border-radius:6px;display:inline-block;margin-bottom:10px">${builderBias==='bull'?'🟢 BULLISH':'🔴 BEARISH'}</div>
+    ${seqHTML}`;
+  setPrio(builderPrio);
+}
+
+function saveCustomPattern(){
+  const name=document.getElementById('pat-name').value.trim();
+  const emoji=document.getElementById('pat-emoji').value.trim()||'📊';
+  const desc=document.getElementById('pat-desc').value.trim();
+  if(!name)return;
+  const pat={
+    id:Date.now(),name,emoji,desc,
+    bias:builderBias,priority:builderPrio,
+    sequence:builderSequence.map(c=>[...c]),
+    active:true,
+    createdAt:new Date().toLocaleDateString('nl-NL')
+  };
+  customPatterns.push(pat);
+  save();closeModal();
+  renderCustomPatternsList();
+  toast(`✓ Patroon "${name}" opgeslagen!`,'var(--purple)');
+}
+
+// ══════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════
+function setIndicator(ind){
+  strategy.indicator=ind;
+  ['RSI','MA','Pattern','Combined'].forEach(i=>{
+    document.getElementById('ind-'+i)?.classList.toggle('active',i===ind);
+  });
+  const hints={RSI:'Bot koopt op RSI oversold.',MA:'Bot koopt bij MA crossover.',Pattern:'Bot koopt op actieve candlestick patronen.',Combined:'Combineert RSI, MA en patronen.'};
+  const h=document.getElementById('strategy-hint');if(h)h.textContent=hints[ind]||'';
+}
+function resetCapital(){
+  const v=parseFloat(document.getElementById('new-capital').value);
+  if(v>0){capital=v;cash=v;openPositions={};trades=[];save();updateHeader();toast('Kapitaal gereset!');}
+}
+function renderMarketToggles(){
+  const el=document.getElementById('market-toggles');if(!el)return;
+  el.innerHTML=Object.keys(MARKETS).map(sym=>{
+    const a=strategy.markets.includes(sym),m=MARKETS[sym];
+    return`<div class="mkt-chip" style="background:${a?m.color+'22':'var(--panel2)'};border-color:${a?m.color:'var(--border)'};color:${a?m.color:'var(--sub)'}" onclick="toggleMarket('${sym}')">${sym}</div>`;
+  }).join('');
+}
+function toggleMarket(sym){
+  strategy.markets=strategy.markets.includes(sym)?strategy.markets.filter(s=>s!==sym):[...strategy.markets,sym];
+  renderMarketToggles();
+}
+
+// ══════════════════════════════════════════════════════
+// TRADING MODUS
+// ══════════════════════════════════════════════════════
+function setMode(mode){
+  if(mode === 'live' && !window._bvConnected){
+    toast('⚠️ Verbind eerst Bitvavo via de knop bovenin!','var(--red)');
+    return;
+  }
+  if(mode === 'live'){
+    if(!confirm('⚠️ LET OP: Je schakelt over naar LIVE modus. De bot plaatst dan ECHTE orders met ECHT geld op Bitvavo. Weet je het zeker?')) return;
+  }
+  tradingMode = mode;
+  localStorage.setItem('tb_mode', mode);
+  renderBot();
+  toast(mode==='paper'?'📄 Paper modus actief — nep geld':'💶 Live modus actief — echte orders!', mode==='paper'?'var(--green)':'var(--red)');
+}
+
+function toggleTradingMode(){
+  setMode(tradingMode==='paper'?'live':'paper');
+}
+
+function setPaperCapital(){
+  const v = parseFloat(document.getElementById('paper-capital-input').value);
+  if(v>0){
+    capital=v; cash=v; openPositions={}; trades=[];
+    botLog=[];
+    save(); updateHeader(); renderBot();
+    toast(`📄 Paper kapitaal ingesteld op €${v.toLocaleString('nl-NL')}`,'var(--green)');
+  }
+}
+function quickCapital(v){
+  document.getElementById('paper-capital-input').value = v;
+  setPaperCapital();
+}
+
+// ══════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════
+function showPage(name,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+name)?.classList.add('active');
+  if(btn)btn.classList.add('active');
+  if(name==='analyse')renderAnalyse();
+  if(name==='bot')renderBot();
+  if(name==='trades')renderTrades();
+  if(name==='patterns'){renderPatternsPage();renderMarketToggles();}
+}
+
+// ══════════════════════════════════════════════════════
+// TOAST & PERSIST
+// ══════════════════════════════════════════════════════
+let toastTimer;
+function toast(msg,color='#00d68f'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.style.color=color;el.style.borderColor=color+'44';
+  el.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2500);
+}
+function save(){
+  localStorage.setItem('tb_capital',capital);
+  localStorage.setItem('tb_cash',cash);
+  localStorage.setItem('tb_positions',JSON.stringify(openPositions));
+  localStorage.setItem('tb_trades',JSON.stringify(trades));
+  localStorage.setItem('tb_custom_patterns',JSON.stringify(customPatterns));
+}
+
+// ══════════════════════════════════════════════════════
+// PWA
+// ══════════════════════════════════════════════════════
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ══════════════════════════════════════════════════════
+// EVENTS
+// ══════════════════════════════════════════════════════
+document.getElementById('toggle-bot-btn').addEventListener('click',()=>{
+  botActive=!botActive;addLog(botActive?'▶ Bot gestart':'⏹ Bot gestopt');renderBot();
+});
+document.getElementById('btn-buy').addEventListener('click',manualBuy);
+document.getElementById('btn-sell').addEventListener('click',manualSell);
+document.querySelectorAll('.tf-tab[data-tf]').forEach(t=>t.addEventListener('click',()=>setTF(t.dataset.tf)));
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+updateHeader();renderMarkets();renderTrades();
+setIndicator('Combined');
+if(!localStorage.getItem('tb_cash')){
+  const v=prompt('Startkapitaal ($):','10000');
+  if(v&&parseFloat(v)>0){capital=parseFloat(v);cash=capital;save();}
+  updateHeader();
+}
+
+// ── Bitvavo integratie ──────────────────────────────────────────
+(function initBitvavo(){
+  const cfg = JSON.parse(localStorage.getItem('tb_bitvavo')||'null');
+  const badge = document.getElementById('exchange-badge');
+
+  if(!cfg){
+    if(badge) badge.innerHTML='<span class="badge" style="background:var(--panel2);color:var(--dim)">🔌 Koppel Bitvavo</span>';
+    return;
+  }
+
+  // Toon verbonden badge
+  if(badge) badge.innerHTML='<span class="badge" style="background:#0d2b1a;color:var(--green)">🟢 Bitvavo live</span>';
+
+  // Maak Bitvavo client aan
+  const bvClient = new BitvavoClient({ apiKey:cfg.apiKey, apiSecret:cfg.apiSecret });
+  window._bvClient    = bvClient;
+  window._bvConnected = true;
+
+  // Live prijzen via WebSocket — alleen crypto pairs die Bitvavo ondersteunt
+  const livePairs = Object.keys(window.BITVAVO_SYMBOL_MAP||{});
+
+  // REST prijzen eerst laden
+  bvClient.getAllPrices(livePairs).then(p=>{
+    Object.entries(p).forEach(([s,v])=>{ if(prices[s]!==undefined) prices[s]=v; });
+    renderMarkets();
+    if(document.getElementById('page-analyse').classList.contains('active')) renderAnalyse();
+  }).catch(()=>{});
+
+  // WebSocket live feed
+  bvClient.onPrice = (sym, price) => {
+    if(prices[sym] !== undefined){
+      prices[sym] = price;
+      history[sym] = [...(history[sym]||[]).slice(-299), price];
+    }
+  };
+  bvClient.subscribePrices(livePairs).catch(()=>{});
+
+  // Live candles via WebSocket
+  bvClient.onCandle = (sym, candle) => {
+    if(candles[sym]) candles[sym] = [...candles[sym].slice(-299), candle];
+  };
+  bvClient.subscribeCandles(livePairs, '5m').catch(()=>{});
+
+  console.log('[TradeBot] Bitvavo verbonden');
+})();
+
+// ── Echte orders via Bitvavo ────────────────────────────────────
+const _origSell = executeSell;
+async function executeSell(sym, price, pos, reason){
+  if(tradingMode==='live' && window._bvConnected && window._bvClient && window.BITVAVO_SYMBOL_MAP?.[sym]){
+    try{
+      const result = await window._bvClient.marketSell(sym, pos.qty);
+      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
+      price = realPrice;
+      addLog(`✅ BITVAVO ORDER: SELL ${sym} @ €${fmt(realPrice)}`);
+    } catch(err){
+      addLog(`❌ Bitvavo order mislukt: ${err.message} — simulatie gebruikt`);
+    }
+  }
+  const pnl=pos.qty*price-pos.qty*pos.entryPrice;
+  cash+=pos.qty*price; delete openPositions[sym];
+  addTrade({sym,side:'SELL',qty:pos.qty,price,pnl,reason});
+  addLog(`${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(price)} — ${reason}`);
+  toast(`${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
+  save();
+}
+
+const _origManualBuy = manualBuy;
+async function manualBuy(){
+  const sym=currentPair, price=prices[sym]; if(!price)return;
+  const spend=cash*(strategy.positionSize/100);
+  if(spend<1){toast('Niet genoeg cash','#ff4757');return;}
+  if(tradingMode==='live' && window._bvConnected && window._bvClient && window.BITVAVO_SYMBOL_MAP?.[sym]){
+    try{
+      const result = await window._bvClient.marketBuy(sym, spend);
+      const realQty   = parseFloat(result.filledAmount || spend/price);
+      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
+      cash -= spend;
+      openPositions[sym] = {qty:realQty, entryPrice:realPrice};
+      addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason:'Handmatig (Bitvavo)'});
+      addLog(`✅ BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins)`);
+      toast(`BUY ${sym} — ECHTE ORDER`,'#00d68f'); save(); return;
+    } catch(err){
+      addLog(`❌ Bitvavo order mislukt: ${err.message} — simulatie gebruikt`);
+    }
+  }
+  cash-=spend; openPositions[sym]={qty:spend/price,entryPrice:price};
+  addTrade({sym,side:'BUY',qty:spend/price,price,reason:'Handmatig'});
+  addLog(`🟢 HANDMATIG BUY ${sym}`); toast(`BUY ${sym}`,'#00d68f'); save();
+}
+</script>
+</body>
+</html>
