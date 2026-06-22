@@ -102,7 +102,13 @@ class BitvavoClient {
     this.ws.onmessage = (e) => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
-      this._handle(msg);
+      this._log('← ' + e.data.slice(0, 150));
+      // Bitvavo stuurt soms een array van berichten (bv. meerdere balances)
+      if (Array.isArray(msg)) {
+        msg.forEach(m => this._handle(m));
+      } else {
+        this._handle(msg);
+      }
     };
 
     this.ws.onerror = () => {
@@ -127,7 +133,11 @@ class BitvavoClient {
     }
   }
 
-  // ── Request met requestId matching (DE FIX) ─────────────────────
+  // ── Request met requestId matching + verzamelen van losse berichten ──
+  // Bitvavo stuurt voor sommige acties (bv. privateGetBalance zonder
+  // 'symbol' filter) één los bericht PER asset, elk met dezelfde requestId.
+  // We verzamelen alle berichten met die requestId en resolven na een
+  // korte stilte (300ms zonder nieuw bericht voor die id).
   _request(action, params = {}) {
     return new Promise((resolve, reject) => {
       const requestId = this._reqId++;
@@ -135,7 +145,7 @@ class BitvavoClient {
         delete this._pending[requestId];
         reject(new Error(`Timeout op actie '${action}' — geen antwoord van Bitvavo`));
       }, 10000);
-      this._pending[requestId] = { resolve, reject, timer, action };
+      this._pending[requestId] = { resolve, reject, timer, action, buffer:[], settleTimer:null };
 
       const msg = { action, ...params, requestId };
       if (this.authenticated) {
@@ -144,6 +154,21 @@ class BitvavoClient {
         this._subQueue.push(msg);
       }
     });
+  }
+
+  // Voeg een resultaat toe aan de buffer van een pending request en
+  // resolve zodra er even niets meer binnenkomt (debounce 250ms)
+  _bufferResult(requestId, value) {
+    const p = this._pending[requestId];
+    if (!p) return;
+    p.buffer.push(value);
+    clearTimeout(p.settleTimer);
+    p.settleTimer = setTimeout(() => {
+      clearTimeout(p.timer);
+      delete this._pending[requestId];
+      // Eén bericht → geef direct het object terug, anders de hele array
+      p.resolve(p.buffer.length === 1 ? p.buffer[0] : p.buffer);
+    }, 250);
   }
 
   // ── Handle incoming messages ────────────────────────────────────
@@ -170,6 +195,7 @@ class BitvavoClient {
       if (msg.requestId && this._pending[msg.requestId]) {
         const p = this._pending[msg.requestId];
         clearTimeout(p.timer);
+        clearTimeout(p.settleTimer);
         delete this._pending[msg.requestId];
         p.reject(new Error(errText));
       } else {
@@ -179,13 +205,10 @@ class BitvavoClient {
       return;
     }
 
-    // 3. Antwoord op een actie-verzoek (heeft requestId)
+    // 3. Antwoord op een actie-verzoek (heeft requestId) — verzamel in buffer
     if (msg.requestId !== undefined && this._pending[msg.requestId]) {
-      const p = this._pending[msg.requestId];
-      clearTimeout(p.timer);
-      delete this._pending[msg.requestId];
-      // Bitvavo wrapt data soms in { action, response }, soms direct
-      p.resolve(msg.response !== undefined ? msg.response : msg);
+      const value = msg.response !== undefined ? msg.response : msg;
+      this._bufferResult(msg.requestId, value);
       return;
     }
 
@@ -256,13 +279,18 @@ class BitvavoClient {
 
   // Saldo ophalen — DE FIX: 'getBalance' bestaat, 'getAccount' niet
   async getAllBalances() {
-    const res = await this._request('getBalance', {});
-    return Array.isArray(res) ? res : (res?.response || []);
+    const res = await this._request('privateGetBalance', {});
+    if (Array.isArray(res)) return res;
+    if (res && res.symbol) return [res]; // één los balance-object
+    return [];
   }
 
   async getBalance(symbol) {
-    const res = await this._request('getBalance', symbol ? { symbol } : {});
-    const arr = Array.isArray(res) ? res : (res?.response || []);
+    const res = await this._request('privateGetBalance', symbol ? { symbol } : {});
+    let arr;
+    if (Array.isArray(res)) arr = res;
+    else if (res && res.symbol) arr = [res];
+    else arr = [];
     if (symbol) return arr.find(b => b.symbol === symbol) || null;
     return arr;
   }
@@ -270,7 +298,7 @@ class BitvavoClient {
   // Account fee-info (REST: GET /account)
   async getAccountFees() {
     try {
-      const res = await this._request('getAccount', {});
+      const res = await this._request('getAccountFees', {});
       return res;
     } catch {
       // Sommige Bitvavo API-versies kennen geen WS-actie voor fees — geef leeg terug
@@ -339,21 +367,21 @@ class BitvavoClient {
 
   async getOpenOrders(ourSymbol) {
     const market = BV_SYMBOL_MAP[ourSymbol];
-    const res = await this._request('privateGetOrdersOpen', market ? { market } : {});
+    const res = await this._request('getOrders', market ? { market, status:'open' } : { status:'open' });
     return res?.response || res;
   }
 
   async cancelOrder(ourSymbol, orderId) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error('Onbekend paar');
-    const res = await this._request('privateCancelOrder', { market, orderId });
+    const res = await this._request('cancelOrder', { market, orderId });
     return res?.response || res;
   }
 
   async getMyTrades(ourSymbol, limit = 50) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) return [];
-    const res = await this._request('privateGetTrades', { market, limit });
+    const res = await this._request('getTradeHistory', { market, limit });
     return res?.response || res || [];
   }
 
