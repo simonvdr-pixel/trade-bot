@@ -132,6 +132,12 @@ input:focus{border-color:var(--blue)}
   <div id="live-prices"></div>
 </div>
 
+<!-- Debug log -->
+<div class="card" id="debug-card" style="display:none">
+  <div class="card-title">🔍 Verbindingslog (debug)</div>
+  <div id="debug-log" style="font-family:monospace;font-size:11px;color:var(--sub);max-height:160px;overflow-y:auto;line-height:1.6"></div>
+</div>
+
 <!-- Opgeslagen verbinding -->
 <div class="card" id="saved-card" style="display:none">
   <div class="card-title">💾 Opgeslagen verbinding</div>
@@ -185,8 +191,8 @@ async function testConnection() {
 
   // Timeout vangnet — als authenticatie te lang duurt
   connectTimeout = setTimeout(() => {
-    setStatus('error', 'Time-out — geen reactie van Bitvavo. Controleer je sleutels.');
-    toast('Verbinding time-out', 'var(--red)');
+    setStatus('error', 'Time-out bij authenticeren. Check: zijn "View" en "Trading" rechten aan? Klopt de Secret (geen spaties)?');
+    toast('Authenticatie time-out', 'var(--red)');
     btn.innerHTML = '🔌 Verbinden via WebSocket';
     btn.disabled = false;
   }, 12000);
@@ -199,21 +205,32 @@ async function testConnection() {
     btn.disabled = false;
   };
 
+  client.onLog = (msg) => {
+    console.log('[Bitvavo debug]', msg);
+    const dc = document.getElementById('debug-card');
+    const dl = document.getElementById('debug-log');
+    if (dc) dc.style.display = 'block';
+    if (dl) {
+      const time = new Date().toLocaleTimeString('nl-NL');
+      dl.innerHTML += `<div>[${time}] ${msg}</div>`;
+      dl.scrollTop = dl.scrollHeight;
+    }
+  };
+
   client.onConnect = async () => {
     clearTimeout(connectTimeout);
     try {
-      // Account + saldo ophalen via WebSocket request
-      const account  = await client.getAccount();
+      // Saldo ophalen via WebSocket (getBalance — getAccount bestaat niet)
       const balances = await client.getAllBalances();
       const withValue = (balances || []).filter(b => parseFloat(b.available) > 0 || parseFloat(b.inOrder) > 0);
 
       setStatus('connected', 'Live WebSocket verbinding actief');
-      showAccountInfo(withValue, account);
+      showAccountInfo(withValue, {});
       startLivePrices();
       toast('✓ Verbonden met Bitvavo via WebSocket!', 'var(--green)');
     } catch (err) {
       setStatus('error', err.message);
-      toast('Fout bij ophalen account: ' + err.message, 'var(--red)');
+      toast('Fout bij ophalen saldo: ' + err.message, 'var(--red)');
     } finally {
       btn.innerHTML = '🔌 Verbinden via WebSocket';
       btn.disabled = false;

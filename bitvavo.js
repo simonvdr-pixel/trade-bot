@@ -1,15 +1,20 @@
 // ══════════════════════════════════════════════════════════════════
-// BITVAVO WEBSOCKET CLIENT — TradeBot
+// BITVAVO WEBSOCKET CLIENT — TradeBot (gecorrigeerd)
 // ══════════════════════════════════════════════════════════════════
 // 100% WebSocket — geen CORS problemen, werkt direct in browser
-// Docs: https://docs.bitvavo.com/#tag/WebSocket
+// Docs: https://docs.bitvavo.com/docs/websocket-overview/
 // WS:   wss://ws.bitvavo.com/v2
+//
+// BELANGRIJK — correcties t.o.v. vorige versie:
+//  - Bitvavo gebruikt 'requestId' om verzoek en antwoord te koppelen
+//    (niet '_id')
+//  - Er bestaat geen 'getAccount' actie — gebruik 'getBalance' voor saldo
+//  - Antwoorden komen terug als { action, response, requestId }
 // ══════════════════════════════════════════════════════════════════
 
 const BV_WS = 'wss://ws.bitvavo.com/v2';
 
 const BV_SYMBOL_MAP = {
-  // Major coins
   'BTC/EUR':  'BTC-EUR',
   'ETH/EUR':  'ETH-EUR',
   'SOL/EUR':  'SOL-EUR',
@@ -20,17 +25,16 @@ const BV_SYMBOL_MAP = {
   'AVAX/EUR': 'AVAX-EUR',
   'DOT/EUR':  'DOT-EUR',
   'LINK/EUR': 'LINK-EUR',
-  // Toegevoegd vanuit jouw portfolio
-  'XLM/EUR':  'XLM-EUR',   // Stellar
-  'RE/EUR':   'RE-EUR',    // Re Protocol
-  'WLD/EUR':  'WLD-EUR',   // Worldcoin
-  'SUI/EUR':  'SUI-EUR',   // Sui
-  'FET/EUR':  'FET-EUR',   // Fetch.ai
-  'ARX/EUR':  'ARX-EUR',   // Arcium
-  'EIGEN/EUR':'EIGEN-EUR', // EigenLayer
-  'SYN/EUR':  'SYN-EUR',   // Synapse
-  'HYPE/EUR': 'HYPE-EUR',  // Hyperliquid
-  'TAO/EUR':  'TAO-EUR',   // Bittensor
+  'XLM/EUR':  'XLM-EUR',
+  'RE/EUR':   'RE-EUR',
+  'WLD/EUR':  'WLD-EUR',
+  'SUI/EUR':  'SUI-EUR',
+  'FET/EUR':  'FET-EUR',
+  'ARX/EUR':  'ARX-EUR',
+  'EIGEN/EUR':'EIGEN-EUR',
+  'SYN/EUR':  'SYN-EUR',
+  'HYPE/EUR': 'HYPE-EUR',
+  'TAO/EUR':  'TAO-EUR',
 };
 const BV_SYMBOL_REV = Object.fromEntries(
   Object.entries(BV_SYMBOL_MAP).map(([k,v]) => [v,k])
@@ -58,22 +62,23 @@ class BitvavoClient {
     this.authenticated = false;
 
     // Callbacks
-    this.onPrice      = null;  // (ourSymbol, price) => {}
-    this.onCandle     = null;  // (ourSymbol, candle) => {}
-    this.onOrder      = null;  // (orderData) => {}
-    this.onFill       = null;  // (fillData) => {}
-    this.onBalance    = null;  // (balances) => {}
-    this.onError      = null;  // (msg) => {}
-    this.onConnect    = null;  // () => {}
-    this.onDisconnect = null;  // () => {}
+    this.onPrice      = null;
+    this.onCandle     = null;
+    this.onOrder      = null;
+    this.onFill       = null;
+    this.onError      = null;
+    this.onConnect    = null;
+    this.onDisconnect = null;
+    this.onLog        = null; // optioneel: (msg) => {} voor debug
 
-    // Pending requests (id → {resolve, reject})
-    this._pending  = {};
-    this._msgId    = 1;
-    this._subQueue = [];      // messages to send after auth
+    this._pending  = {};   // requestId → {resolve, reject, timer}
+    this._reqId    = 1;
+    this._subQueue = [];
     this._reconnectTimer = null;
     this._destroyed = false;
   }
+
+  _log(msg) { if (this.onLog) this.onLog(msg); console.log('[Bitvavo]', msg); }
 
   // ── Connect & authenticate ──────────────────────────────────────
   connect() {
@@ -82,8 +87,7 @@ class BitvavoClient {
     this.ws = new WebSocket(BV_WS);
 
     this.ws.onopen = async () => {
-      console.log('[Bitvavo WS] Verbonden');
-      // Authenticate
+      this._log('WebSocket open, authenticeren...');
       const ts  = Date.now();
       const sig = await hmacSHA256(this.apiSecret, ts + 'GET/v2/websocket');
       this._send({
@@ -102,39 +106,38 @@ class BitvavoClient {
     };
 
     this.ws.onerror = () => {
+      this._log('WebSocket fout');
       if (this.onError) this.onError('WebSocket verbindingsfout');
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (e) => {
+      this._log(`WebSocket gesloten (code ${e.code})`);
       this.connected     = false;
       this.authenticated = false;
       if (this.onDisconnect) this.onDisconnect();
       if (!this._destroyed) {
-        console.log('[Bitvavo WS] Herverbinden over 4s...');
         this._reconnectTimer = setTimeout(() => this.connect(), 4000);
       }
     };
   }
 
-  // ── Send a message ──────────────────────────────────────────────
   _send(msg) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
   }
 
-  // ── Send with response promise (for account/order calls) ────────
-  _request(payload) {
+  // ── Request met requestId matching (DE FIX) ─────────────────────
+  _request(action, params = {}) {
     return new Promise((resolve, reject) => {
-      const id = this._msgId++;
-      this._pending[id] = { resolve, reject };
+      const requestId = this._reqId++;
       const timer = setTimeout(() => {
-        delete this._pending[id];
-        reject(new Error('Timeout — geen antwoord van Bitvavo'));
+        delete this._pending[requestId];
+        reject(new Error(`Timeout op actie '${action}' — geen antwoord van Bitvavo`));
       }, 10000);
-      this._pending[id].timer = timer;
+      this._pending[requestId] = { resolve, reject, timer, action };
 
-      const msg = { ...payload, _id: id };
+      const msg = { action, ...params, requestId };
       if (this.authenticated) {
         this._send(msg);
       } else {
@@ -145,47 +148,48 @@ class BitvavoClient {
 
   // ── Handle incoming messages ────────────────────────────────────
   _handle(msg) {
-    // Auth response
+    // 1. Authenticatie respons
     if (msg.event === 'authenticate') {
       if (msg.authenticated) {
         this.authenticated = true;
         this.connected     = true;
-        console.log('[Bitvavo WS] Geauthenticeerd ✓');
+        this._log('Geauthenticeerd ✓');
         if (this.onConnect) this.onConnect();
-        // Flush queued messages
         this._subQueue.forEach(m => this._send(m));
         this._subQueue = [];
       } else {
-        if (this.onError) this.onError('Authenticatie mislukt — controleer je API sleutels');
+        this._log('Authenticatie mislukt: ' + JSON.stringify(msg));
+        if (this.onError) this.onError('Authenticatie mislukt — controleer je API sleutels en of "Trading"/"View" rechten aanstaan');
       }
       return;
     }
 
-    // Error
-    if (msg.error || msg.errorCode) {
-      const errMsg = msg.error || `code ${msg.errorCode}`;
-      // Resolve pending request with error
-      if (msg._id && this._pending[msg._id]) {
-        const p = this._pending[msg._id];
+    // 2. Foutmelding (met of zonder requestId)
+    if (msg.errorCode !== undefined || msg.error) {
+      const errText = msg.error || `Foutcode ${msg.errorCode}`;
+      if (msg.requestId && this._pending[msg.requestId]) {
+        const p = this._pending[msg.requestId];
         clearTimeout(p.timer);
-        delete this._pending[msg._id];
-        p.reject(new Error(errMsg));
+        delete this._pending[msg.requestId];
+        p.reject(new Error(errText));
       } else {
-        if (this.onError) this.onError(errMsg);
+        this._log('Fout zonder requestId match: ' + errText);
+        if (this.onError) this.onError(errText);
       }
       return;
     }
 
-    // Response to a request (_id present)
-    if (msg._id && this._pending[msg._id]) {
-      const p = this._pending[msg._id];
+    // 3. Antwoord op een actie-verzoek (heeft requestId)
+    if (msg.requestId !== undefined && this._pending[msg.requestId]) {
+      const p = this._pending[msg.requestId];
       clearTimeout(p.timer);
-      delete this._pending[msg._id];
-      p.resolve(msg);
+      delete this._pending[msg.requestId];
+      // Bitvavo wrapt data soms in { action, response }, soms direct
+      p.resolve(msg.response !== undefined ? msg.response : msg);
       return;
     }
 
-    // Ticker (live price)
+    // 4. Ticker (live price) — geen requestId, is een subscribe-event
     if (msg.event === 'ticker' && msg.market) {
       const ourSym = BV_SYMBOL_REV[msg.market];
       if (ourSym && msg.lastPrice && this.onPrice) {
@@ -194,138 +198,128 @@ class BitvavoClient {
       return;
     }
 
-    // Candle update
+    // 5. Candle update
     if (msg.event === 'candle' && msg.market && msg.candle) {
       const ourSym = BV_SYMBOL_REV[msg.market];
       if (ourSym && this.onCandle) {
         const k = Array.isArray(msg.candle[0]) ? msg.candle[0] : msg.candle;
         this.onCandle(ourSym, {
-          t: k[0],
-          o: parseFloat(k[1]),
-          h: parseFloat(k[2]),
-          l: parseFloat(k[3]),
-          c: parseFloat(k[4]),
-          v: parseFloat(k[5]),
+          t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]),
+          l: parseFloat(k[3]), c: parseFloat(k[4]), v: parseFloat(k[5]),
         });
       }
       return;
     }
 
-    // Account order update
-    if (msg.event === 'order' && this.onOrder) {
-      this.onOrder(msg);
+    // 6. Subscribe-bevestiging (event: 'subscribed')
+    if (msg.event === 'subscribed') {
+      this._log('Subscriptie bevestigd: ' + JSON.stringify(msg.subscriptions || msg));
       return;
     }
 
-    // Fill (trade executed)
-    if (msg.event === 'fill' && this.onFill) {
-      this.onFill(msg);
-      return;
-    }
+    // 7. Order/fill events (account channel)
+    if (msg.event === 'order' && this.onOrder) { this.onOrder(msg); return; }
+    if (msg.event === 'fill'  && this.onFill)  { this.onFill(msg);  return; }
 
-    // Balance update after order
-    if (msg.event === 'account' && this.onBalance) {
-      this.onBalance(msg);
-      return;
-    }
+    // Onbekend event — loggen voor debug
+    this._log('Onbehandeld bericht: ' + JSON.stringify(msg).slice(0,200));
   }
 
   // ══════════════════════════════════════════════════════════════
-  // PUBLIC DATA (no auth needed — subscribe without auth too)
+  // SUBSCRIPTIONS (geen requestId nodig, blijven open)
   // ══════════════════════════════════════════════════════════════
 
-  // Live ticker prices for multiple pairs
   subscribeTicker(ourSymbols) {
     const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
+    if (!markets.length) return;
     const msg = { action:'subscribe', channels:[{ name:'ticker', markets }] };
-    if (this.authenticated) this._send(msg);
-    else this._subQueue.push(msg);
+    if (this.authenticated) this._send(msg); else this._subQueue.push(msg);
   }
 
-  // Live candle updates
   subscribeCandles(ourSymbols, interval = '5m') {
     const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
+    if (!markets.length) return;
     const msg = { action:'subscribe', channels:[{ name:'candles', interval:[interval], markets }] };
-    if (this.authenticated) this._send(msg);
-    else this._subQueue.push(msg);
+    if (this.authenticated) this._send(msg); else this._subQueue.push(msg);
   }
 
-  // Account order/fill stream
   subscribeAccount(ourSymbols) {
     const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
+    if (!markets.length) return;
     const msg = { action:'subscribe', channels:[{ name:'account', markets }] };
-    if (this.authenticated) this._send(msg);
-    else this._subQueue.push(msg);
+    if (this.authenticated) this._send(msg); else this._subQueue.push(msg);
   }
 
   // ══════════════════════════════════════════════════════════════
-  // ACCOUNT (requires auth)
+  // ACCOUNT ACTIES (vereisen auth) — gecorrigeerde actienamen
   // ══════════════════════════════════════════════════════════════
 
-  async getAccount() {
-    const res = await this._request({ action:'getAccount' });
-    return res;
-  }
-
-  async getBalance(symbol = null) {
-    const payload = { action:'getBalance' };
-    if (symbol) payload.symbol = symbol;
-    const res = await this._request(payload);
-    return res.response || res.balance || res;
-  }
-
+  // Saldo ophalen — DE FIX: 'getBalance' bestaat, 'getAccount' niet
   async getAllBalances() {
-    const res = await this._request({ action:'getBalance' });
-    const data = res.response || res;
-    return Array.isArray(data) ? data : [];
+    const res = await this._request('getBalance', {});
+    return Array.isArray(res) ? res : (res?.response || []);
   }
 
-  // ── Get current price via WS ────────────────────────────────────
+  async getBalance(symbol) {
+    const res = await this._request('getBalance', symbol ? { symbol } : {});
+    const arr = Array.isArray(res) ? res : (res?.response || []);
+    if (symbol) return arr.find(b => b.symbol === symbol) || null;
+    return arr;
+  }
+
+  // Account fee-info (REST: GET /account)
+  async getAccountFees() {
+    try {
+      const res = await this._request('getAccount', {});
+      return res;
+    } catch {
+      // Sommige Bitvavo API-versies kennen geen WS-actie voor fees — geef leeg terug
+      return null;
+    }
+  }
+
+  // ── Prijs via orderbook (depth 1) ───────────────────────────────
   async getPrice(ourSymbol) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
-    const res = await this._request({ action:'getBook', market, depth:1 });
-    // Use best bid/ask midpoint
-    const bids = res.bids || [];
-    const asks = res.asks || [];
+    const res = await this._request('getBook', { market, depth: 1 });
+    const book = res?.response || res;
+    const bids = book.bids || [];
+    const asks = book.asks || [];
     if (asks.length) return parseFloat(asks[0][0]);
     if (bids.length) return parseFloat(bids[0][0]);
-    throw new Error('Geen prijs beschikbaar');
+    throw new Error('Geen prijs beschikbaar in orderboek');
   }
 
-  // ── Get candle history via WS ───────────────────────────────────
+  // ── Candle geschiedenis ──────────────────────────────────────────
   async getCandles(ourSymbol, interval = '5m', limit = 200) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) return [];
-    const res = await this._request({ action:'getCandles', market, interval, limit });
-    const data = res.response || res.candles || res;
+    const res = await this._request('getCandles', { market, interval, limit });
+    const data = res?.response || res;
     if (!Array.isArray(data)) return [];
     return data.map(k => ({
-      t: k[0],
-      o: parseFloat(k[1]),
-      h: parseFloat(k[2]),
-      l: parseFloat(k[3]),
-      c: parseFloat(k[4]),
-      v: parseFloat(k[5]),
+      t: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]),
+      l: parseFloat(k[3]), c: parseFloat(k[4]), v: parseFloat(k[5]),
     })).reverse();
   }
 
   // ══════════════════════════════════════════════════════════════
-  // ORDERS (requires auth, only in live mode)
+  // ORDERS (vereisen auth, alleen in live modus)
   // ══════════════════════════════════════════════════════════════
 
   async marketBuy(ourSymbol, amountInEur) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
     if (amountInEur < 5) throw new Error('Minimum ordergrootte is €5');
-    const res = await this._request({
-      action:      'privateCreateOrder',
+    const res = await this._request('privateCreateOrder', {
       market,
       side:        'buy',
       orderType:   'market',
       amountQuote: amountInEur.toFixed(2),
+      operatorId:  1001, // verplicht veld sinds 2024
     });
-    return res.response || res;
+    return res?.response || res;
   }
 
   async marketSell(ourSymbol, amount) {
@@ -333,99 +327,46 @@ class BitvavoClient {
     if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
     const rounded = parseFloat(amount.toFixed(8));
     if (rounded <= 0) throw new Error('Hoeveelheid te klein');
-    const res = await this._request({
-      action:    'privateCreateOrder',
+    const res = await this._request('privateCreateOrder', {
       market,
-      side:      'sell',
-      orderType: 'market',
-      amount:    rounded.toString(),
+      side:       'sell',
+      orderType:  'market',
+      amount:     rounded.toString(),
+      operatorId: 1001,
     });
-    return res.response || res;
+    return res?.response || res;
   }
 
   async getOpenOrders(ourSymbol) {
     const market = BV_SYMBOL_MAP[ourSymbol];
-    const payload = { action:'privateGetOrdersOpen' };
-    if (market) payload.market = market;
-    const res = await this._request(payload);
-    return res.response || res;
+    const res = await this._request('privateGetOrdersOpen', market ? { market } : {});
+    return res?.response || res;
   }
 
   async cancelOrder(ourSymbol, orderId) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error('Onbekend paar');
-    const res = await this._request({ action:'privateCancelOrder', market, orderId });
-    return res.response || res;
+    const res = await this._request('privateCancelOrder', { market, orderId });
+    return res?.response || res;
   }
 
   async getMyTrades(ourSymbol, limit = 50) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) return [];
-    const res = await this._request({ action:'privateGetTrades', market, limit });
-    return res.response || res || [];
+    const res = await this._request('privateGetTrades', { market, limit });
+    return res?.response || res || [];
   }
 
   // ── Clean disconnect ────────────────────────────────────────────
   disconnect() {
     this._destroyed = true;
     clearTimeout(this._reconnectTimer);
-    if (this.ws) {
-      try { this.ws.close(); } catch {}
-      this.ws = null;
-    }
+    if (this.ws) { try { this.ws.close(); } catch {} this.ws = null; }
     this.connected     = false;
     this.authenticated = false;
   }
 }
 
-// ── Public price feed (NO auth needed) ───────────────────────────
-// For paper trading without API keys — uses public WS ticker only
-class BitvavoPublicFeed {
-  constructor() {
-    this.ws      = null;
-    this.onPrice = null;
-    this._destroyed = false;
-  }
-
-  connect(ourSymbols) {
-    this._destroyed = false;
-    this.ws = new WebSocket(BV_WS);
-
-    this.ws.onopen = () => {
-      const markets = ourSymbols.map(s => BV_SYMBOL_MAP[s]).filter(Boolean);
-      this.ws.send(JSON.stringify({
-        action:   'subscribe',
-        channels: [{ name:'ticker', markets }],
-      }));
-      console.log('[Bitvavo Public] Verbonden, ticker geabonneerd');
-    };
-
-    this.ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.event === 'ticker' && msg.market && msg.lastPrice) {
-          const ourSym = BV_SYMBOL_REV[msg.market];
-          if (ourSym && this.onPrice) this.onPrice(ourSym, parseFloat(msg.lastPrice));
-        }
-      } catch {}
-    };
-
-    this.ws.onclose = () => {
-      if (!this._destroyed) {
-        setTimeout(() => this.connect(ourSymbols), 4000);
-      }
-    };
-
-    this.ws.onerror = () => {};
-  }
-
-  disconnect() {
-    this._destroyed = true;
-    if (this.ws) { try { this.ws.close(); } catch {} }
-  }
-}
-
-window.BitvavoClient     = BitvavoClient;
-window.BitvavoPublicFeed = BitvavoPublicFeed;
+window.BitvavoClient      = BitvavoClient;
 window.BITVAVO_SYMBOL_MAP = BV_SYMBOL_MAP;
 window.BITVAVO_SYMBOL_REV = BV_SYMBOL_REV;

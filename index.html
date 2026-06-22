@@ -1301,38 +1301,49 @@ if(!localStorage.getItem('tb_cash')){
     return;
   }
 
-  // Toon verbonden badge
-  if(badge) badge.innerHTML='<span class="badge" style="background:#0d2b1a;color:var(--green)">🟢 Bitvavo live</span>';
+  if(badge) badge.innerHTML='<span class="badge" style="background:#2a1a00;color:var(--amber)">🟡 Verbinden...</span>';
 
   // Maak Bitvavo client aan
   const bvClient = new BitvavoClient({ apiKey:cfg.apiKey, apiSecret:cfg.apiSecret });
   window._bvClient    = bvClient;
-  window._bvConnected = true;
+  window._bvConnected = false; // pas true ná succesvolle auth
 
-  // Live prijzen via WebSocket — alleen crypto pairs die Bitvavo ondersteunt
   const livePairs = Object.keys(window.BITVAVO_SYMBOL_MAP||{});
 
-  // REST prijzen eerst laden
-  bvClient.getAllPrices(livePairs).then(p=>{
-    Object.entries(p).forEach(([s,v])=>{ if(prices[s]!==undefined) prices[s]=v; });
-    renderMarkets();
-    if(document.getElementById('page-analyse').classList.contains('active')) renderAnalyse();
-  }).catch(()=>{});
+  // Wacht op succesvolle authenticatie vóórdat we iets opvragen of subscriben
+  bvClient.onConnect = () => {
+    window._bvConnected = true;
+    if(badge) badge.innerHTML='<span class="badge" style="background:#0d2b1a;color:var(--green)">🟢 Bitvavo live</span>';
 
-  // WebSocket live feed
-  bvClient.onPrice = (sym, price) => {
-    if(prices[sym] !== undefined){
-      prices[sym] = price;
-      history[sym] = [...(history[sym]||[]).slice(-299), price];
-    }
-  };
-  bvClient.subscribePrices(livePairs).catch(()=>{});
+    // Live prijzen via WebSocket ticker subscription
+    bvClient.onPrice = (sym, price) => {
+      if(prices[sym] !== undefined){
+        prices[sym] = price;
+        history[sym] = [...(history[sym]||[]).slice(-299), price];
+      }
+    };
+    bvClient.subscribeTicker(livePairs);
 
-  // Live candles via WebSocket
-  bvClient.onCandle = (sym, candle) => {
-    if(candles[sym]) candles[sym] = [...candles[sym].slice(-299), candle];
+    // Live candles
+    bvClient.onCandle = (sym, candle) => {
+      if(candles[sym]) candles[sym] = [...candles[sym].slice(-299), candle];
+    };
+    bvClient.subscribeCandles(livePairs, '5m');
+
+    console.log('[TradeBot] Bitvavo WebSocket verbonden en geabonneerd');
   };
-  bvClient.subscribeCandles(livePairs, '5m').catch(()=>{});
+
+  bvClient.onError = (msg) => {
+    console.warn('[TradeBot] Bitvavo fout:', msg);
+    if(badge) badge.innerHTML='<span class="badge" style="background:#2a0d0d;color:var(--red)">🔴 Bitvavo fout</span>';
+  };
+
+  bvClient.onDisconnect = () => {
+    window._bvConnected = false;
+    if(badge) badge.innerHTML='<span class="badge" style="background:var(--panel2);color:var(--dim)">🔌 Herverbinden...</span>';
+  };
+
+  bvClient.connect();
 
   console.log('[TradeBot] Bitvavo verbonden');
 })();
