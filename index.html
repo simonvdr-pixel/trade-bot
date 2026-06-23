@@ -582,6 +582,39 @@ Object.entries(MARKETS).forEach(([sym,m])=>{
 // "wint" de nepdata steeds opnieuw omdat tick() vaker draait.
 let liveFedSymbols = new Set();
 
+// ── Echt Bitvavo-saldo (live modus) ────────────────────────────────
+// In live modus tonen we het ECHTE saldo van je Bitvavo-wallet, niet
+// het lokale gesimuleerde 'cash'-bedrag. Wordt periodiek bijgewerkt.
+let realEurBalance = null;          // EUR saldo, null = nog niet geladen
+let realCryptoBalances = {};        // { 'BTC/EUR': 0.0012, ... } — wat je echt bezit
+let lastBalanceSync = 0;
+
+async function syncRealBalances(){
+  if(!window._bvConnected || !window._bvClient) return;
+  try{
+    const balances = await window._bvClient.getAllBalances();
+    const eur = balances.find(b => b.symbol === 'EUR');
+    realEurBalance = eur ? parseFloat(eur.available) : 0;
+
+    // Map crypto-saldi naar onze paren (bv. 'BTC' bezit → 'BTC/EUR')
+    const newCrypto = {};
+    balances.forEach(b => {
+      const ourSym = Object.keys(window.BITVAVO_SYMBOL_MAP||{}).find(s => s.startsWith(b.symbol + '/'));
+      if(ourSym){
+        const amt = parseFloat(b.available) + parseFloat(b.inOrder||0);
+        if(amt > 0) newCrypto[ourSym] = amt;
+      }
+    });
+    realCryptoBalances = newCrypto;
+    lastBalanceSync = Date.now();
+
+    updateHeader();
+    if(document.getElementById('page-bot').classList.contains('active')) renderBot();
+  } catch(err){
+    console.warn('[TradeBot] Saldo synchroniseren mislukt:', err.message);
+  }
+}
+
 function tick(){
   Object.entries(MARKETS).forEach(([sym,m])=>{
     if(liveFedSymbols.has(sym)) return; // live data heeft hier al voorrang
@@ -702,18 +735,44 @@ function getSignal(sym){
 function fmt(n,d=2){if(n==null||isNaN(n))return'—';return n.toLocaleString('nl-NL',{minimumFractionDigits:d,maximumFractionDigits:d});}
 function fmtP(p){if(!p)return'—';return p>=100?'$'+fmt(p,2):p>=1?'$'+fmt(p,3):'$'+fmt(p,5);}
 function fmtPct(n){if(n==null)return'—';return(n>=0?'+':'')+fmt(n)+'%';}
-function totalValue(){let v=cash;Object.entries(openPositions).forEach(([s,pos])=>{v+=pos.qty*(prices[s]||pos.entryPrice);});return v;}
+function totalValue(){
+  if(tradingMode==='live' && realEurBalance!==null){
+    // Live modus: ECHT saldo + echte crypto-waarde tegen huidige prijs
+    let v = realEurBalance;
+    Object.entries(realCryptoBalances).forEach(([sym, qty])=>{
+      v += qty * (prices[sym] || 0);
+    });
+    return v;
+  }
+  // Paper modus: lokale simulatie
+  let v=cash;Object.entries(openPositions).forEach(([s,pos])=>{v+=pos.qty*(prices[s]||pos.entryPrice);});return v;
+}
 
 // ══════════════════════════════════════════════════════
 // RENDER HEADER
 // ══════════════════════════════════════════════════════
 function updateHeader(){
-  const tv=totalValue(),pnl=tv-capital,pct=(pnl/capital)*100;
+  const tv=totalValue();
+  const isLiveWithBalance = tradingMode==='live' && realEurBalance!==null;
+  const baseline = isLiveWithBalance ? (realEurBalance + Object.entries(realCryptoBalances).reduce((a,[s,q])=>a+q*(prices[s]||0),0)) : capital;
+  const pnl=tv-capital,pct=(pnl/capital)*100;
+
   document.getElementById('hdr-val').textContent='€'+fmt(tv);
   const p=document.getElementById('hdr-pnl');
-  p.textContent=(pnl>=0?'+':'')+'$'+fmt(pnl)+' ('+fmtPct(pct)+')';
-  p.style.color=pnl>=0?'var(--green)':'var(--red)';
-  document.getElementById('hdr-cash').textContent='€'+fmt(cash);
+  if(isLiveWithBalance){
+    p.textContent='💶 Live saldo Bitvavo';
+    p.style.color='var(--green)';
+  } else {
+    p.textContent=(pnl>=0?'+':'')+'€'+fmt(pnl)+' ('+fmtPct(pct)+')';
+    p.style.color=pnl>=0?'var(--green)':'var(--red)';
+  }
+
+  const cashEl = document.getElementById('hdr-cash');
+  if(isLiveWithBalance){
+    cashEl.textContent='€'+fmt(realEurBalance);
+  } else {
+    cashEl.textContent='€'+fmt(cash);
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -924,6 +983,7 @@ async function executeBotBuy(sym, price, spend, reason){
       openPositions[sym] = {qty:realQty, entryPrice:realPrice};
       addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason});
       addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins) — ${reason}`);
+      syncRealBalances(); // direct verversen, niet wachten op de 15s interval
       toast(`💶 BUY ${sym} — ECHTE ORDER`,'#00d68f');
       delete liveErrorCooldown[sym]; // gelukt — cooldown opheffen
       save();
@@ -957,6 +1017,7 @@ async function executeSell(sym,price,pos,reason){
       delete openPositions[sym];
       addTrade({sym,side:'SELL',qty:pos.qty,price:realPrice,pnl,reason});
       addLog(`✅ 💶 BITVAVO ORDER: SELL ${sym} @ €${fmt(realPrice)} — ${reason}`);
+      syncRealBalances(); // direct verversen, niet wachten op de 15s interval
       toast(`💶 ${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
       delete liveErrorCooldown[sym];
       save();
@@ -1002,6 +1063,7 @@ async function manualBuy(){
       openPositions[sym] = {qty:realQty, entryPrice:realPrice};
       addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason:'Handmatig (Bitvavo)'});
       addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins)`);
+      syncRealBalances(); // direct verversen, niet wachten op de 15s interval
       toast(`💶 BUY ${sym} — ECHTE ORDER`,'#00d68f');
       delete liveErrorCooldown[sym];
       save();
@@ -1106,19 +1168,40 @@ function renderBot(){
   ].map(([n,v,c])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
     <span style="color:var(--sub)">${n}</span><span style="font-weight:600;color:${c}">${v}</span></div>`).join('');
 
-  // Open posities
-  const keys=Object.keys(openPositions);
+  // Open posities — in live modus tonen we je ECHTE Bitvavo-bezit,
+  // in paper modus de lokale gesimuleerde posities
+  const isLive = tradingMode==='live' && realEurBalance!==null;
+  const posSource = isLive ? realCryptoBalances : openPositions;
+  const keys=Object.keys(posSource);
   document.getElementById('open-positions').innerHTML=keys.length===0
     ?'<div style="color:var(--dim);font-size:13px">Geen open posities</div>'
     :keys.map(sym=>{
-      const pos=openPositions[sym],price=prices[sym]||pos.entryPrice;
-      const pnl2=(price-pos.entryPrice)*pos.qty,pct2=((price-pos.entryPrice)/pos.entryPrice)*100;
+      const price=prices[sym]||0;
+      let qty, entryPrice, hasEntry;
+      if(isLive){
+        qty = posSource[sym];
+        // Instapprijs alleen bekend als de bot deze coin zelf kocht
+        const localPos = openPositions[sym];
+        entryPrice = localPos ? localPos.entryPrice : null;
+        hasEntry = entryPrice != null;
+      } else {
+        qty = posSource[sym].qty;
+        entryPrice = posSource[sym].entryPrice;
+        hasEntry = true;
+      }
+      const pnl2 = hasEntry ? (price-entryPrice)*qty : null;
+      const pct2 = hasEntry ? ((price-entryPrice)/entryPrice)*100 : null;
       return`<div class="pos-row">
         <div><div style="font-weight:700;font-size:14px">${sym}</div>
-        <div style="font-size:11px;color:var(--sub)">${fmt(pos.qty,4)} @ €${fmt(pos.entryPrice)}</div></div>
+        <div style="font-size:11px;color:var(--sub)">${fmt(qty,6)}${hasEntry?` @ €${fmt(entryPrice)}`:' (bezit buiten bot)'}</div></div>
         <div style="text-align:right">
-          <div style="color:${pnl2>=0?'var(--green)':'var(--red)'};font-weight:700">${pnl2>=0?'+':''}€${fmt(pnl2)}</div>
-          <div style="font-size:11px;color:${pnl2>=0?'var(--green)':'var(--red)'}">${fmtPct(pct2)}</div>
+          ${hasEntry?`
+            <div style="color:${pnl2>=0?'var(--green)':'var(--red)'};font-weight:700">${pnl2>=0?'+':''}€${fmt(pnl2)}</div>
+            <div style="font-size:11px;color:${pnl2>=0?'var(--green)':'var(--red)'}">${fmtPct(pct2)}</div>
+          `:`
+            <div style="color:var(--text);font-weight:700">€${fmt(qty*price)}</div>
+            <div style="font-size:11px;color:var(--dim)">huidige waarde</div>
+          `}
         </div></div>`;
     }).join('');
 
@@ -1523,6 +1606,13 @@ if(!localStorage.getItem('tb_cash')){
       console.log('[TradeBot] Initiële prijzen geladen:', Object.keys(allPrices).length, 'paren');
     }).catch(err => console.warn('[TradeBot] Kon initiële prijzen niet ophalen:', err.message));
 
+    // Echt EUR + crypto saldo ophalen, en daarna elke 15s verversen
+    // zodat je portefeuille-waarde altijd actueel blijft — ook als je
+    // buiten de bot om iets stort, opneemt of handelt op Bitvavo zelf.
+    syncRealBalances();
+    if(window._balanceSyncInterval) clearInterval(window._balanceSyncInterval);
+    window._balanceSyncInterval = setInterval(syncRealBalances, 15000);
+
     // Live prijzen via WebSocket ticker subscription
     bvClient.onPrice = (sym, price) => {
       if(prices[sym] !== undefined){
@@ -1551,6 +1641,7 @@ if(!localStorage.getItem('tb_cash')){
     // Simulator mag deze paren weer overnemen zolang er geen live
     // verbinding is, zodat de app niet helemaal stil komt te liggen
     liveFedSymbols.clear();
+    if(window._balanceSyncInterval){ clearInterval(window._balanceSyncInterval); window._balanceSyncInterval = null; }
     if(badge) badge.innerHTML='<span class="badge" style="background:var(--panel2);color:var(--dim)">🔌 Herverbinden...</span>';
   };
 
