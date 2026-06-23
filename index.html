@@ -292,20 +292,33 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     <div style="margin-top:10px;font-size:12px;color:var(--sub)" id="strategy-hint">Bot combineert RSI, MA én patronen voor het sterkste signaal.</div>
   </div>
 
+  <!-- RSI drempels -->
+  <div class="card">
+    <div class="card-title">RSI-drempels</div>
+    <div class="setting-row">
+      <div class="setting-label"><span>Oversold (koopdrempel)</span><span id="lbl-oversold">30</span></div>
+      <input type="range" id="slider-oversold" min="10" max="45" value="30" oninput="document.getElementById('lbl-oversold').textContent=this.value;strategy.rsiOversold=+this.value"/>
+    </div>
+    <div class="setting-row" style="margin-bottom:0">
+      <div class="setting-label"><span>Overbought (verkoopdrempel)</span><span id="lbl-overbought">70</span></div>
+      <input type="range" id="slider-overbought" min="55" max="90" value="70" oninput="document.getElementById('lbl-overbought').textContent=this.value;strategy.rsiOverbought=+this.value"/>
+    </div>
+  </div>
+
   <!-- Risk -->
   <div class="card">
     <div class="card-title">Risicobeheer</div>
     <div class="setting-row">
       <div class="setting-label"><span>Positiegrootte</span><span id="lbl-pos">10%</span></div>
-      <input type="range" min="1" max="50" value="10" oninput="document.getElementById('lbl-pos').textContent=this.value+'%';strategy.positionSize=+this.value"/>
+      <input type="range" id="slider-pos" min="1" max="50" value="10" oninput="document.getElementById('lbl-pos').textContent=this.value+'%';strategy.positionSize=+this.value"/>
     </div>
     <div class="setting-row">
       <div class="setting-label"><span>Stop-Loss</span><span id="lbl-sl">5%</span></div>
-      <input type="range" min="1" max="20" value="5" oninput="document.getElementById('lbl-sl').textContent=this.value+'%';strategy.stopLoss=+this.value"/>
+      <input type="range" id="slider-sl" min="1" max="20" value="5" oninput="document.getElementById('lbl-sl').textContent=this.value+'%';strategy.stopLoss=+this.value"/>
     </div>
     <div class="setting-row">
       <div class="setting-label"><span>Take-Profit</span><span id="lbl-tp">10%</span></div>
-      <input type="range" min="1" max="50" value="10" oninput="document.getElementById('lbl-tp').textContent=this.value+'%';strategy.takeProfit=+this.value"/>
+      <input type="range" id="slider-tp" min="1" max="50" value="10" oninput="document.getElementById('lbl-tp').textContent=this.value+'%';strategy.takeProfit=+this.value"/>
     </div>
   </div>
 
@@ -483,6 +496,13 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     </div>
   </div>
 
+  <!-- Per-coin strategieën -->
+  <div class="card" id="coin-overrides-card">
+    <div class="card-title">🎯 Per-coin strategieën</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:12px">Coins met een eigen, geoptimaliseerde strategie (via "Automatisch optimaliseren" in de backtest). Zonder eigen strategie gebruikt een coin de globale instellingen hierboven.</div>
+    <div id="coin-overrides-list"></div>
+  </div>
+
   <!-- Backtesting entry point -->
   <div class="card" style="background:linear-gradient(135deg,#1a1030,#12151f);border:1px solid var(--purple)44">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -532,7 +552,11 @@ input[type=range]{width:100%;accent-color:var(--blue)}
   <!-- Setup -->
   <div id="backtest-setup">
     <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Markt</label>
-    <select id="bt-market" style="width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
+    <select id="bt-market" style="width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;margin-bottom:10px"></select>
+
+    <div id="bt-override-note" style="display:none;background:var(--amber)15;border:1px solid var(--amber)33;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:var(--amber)">
+      🎯 Deze coin heeft al een eigen, geoptimaliseerde strategie. De backtest hieronder test die instellingen, niet de globale.
+    </div>
 
     <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Periode</label>
     <div style="display:flex;gap:6px;margin-bottom:14px">
@@ -565,8 +589,14 @@ input[type=range]{width:100%;accent-color:var(--blue)}
       Max. houdtijd: <span id="bt-summary-hold" style="color:var(--text)"></span>
     </div>
 
-    <button onclick="runBacktest()" id="bt-run-btn" style="width:100%;padding:14px;background:var(--purple);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer">▶ Backtest uitvoeren</button>
+    <button onclick="runBacktest()" id="bt-run-btn" style="width:100%;padding:14px;background:var(--purple);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px">▶ Backtest uitvoeren</button>
+
+    <button onclick="runOptimization()" id="bt-optimize-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#ff6b00,#ff9500);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer">🔬 Automatisch optimaliseren</button>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px;text-align:center">Test tientallen combinaties op deze periode en past je instellingen automatisch aan naar de beste.</div>
   </div>
+
+  <!-- Optimalisatie-resultaten -->
+  <div id="optimize-results" style="display:none"></div>
 
   <!-- Resultaten -->
   <div id="backtest-results" style="display:none"></div>
@@ -841,6 +871,52 @@ let strategy={
   maxHoldHoursEnabled:false,
   maxHoldHours:48,
 };
+
+// ══════════════════════════════════════════════════════
+// PER-COIN STRATEGIE-OVERRIDES
+// ══════════════════════════════════════════════════════
+// Niet elke coin gedraagt zich hetzelfde — BTC is veel minder
+// volatiel dan een kleine altcoin, dus een vaste stop-loss van 5%
+// is voor de ene coin te ruim en voor de andere te strak. Per coin
+// kan een subset van de signaalparameters overschreven worden; alles
+// wat niet is overschreven valt terug op de globale 'strategy'.
+// Portfolio-niveau instellingen (max posities, correlatie, exposure)
+// zijn bewust NIET per coin instelbaar — die gaan over de hele
+// portfolio, niet over één coin.
+let coinOverrides = JSON.parse(localStorage.getItem('tb_coin_overrides')||'{}');
+
+// Welke velden mogen per coin overschreven worden
+const PER_COIN_KEYS = [
+  'indicator','rsiOversold','rsiOverbought','stopLoss','takeProfit',
+  'positionSize','trailingStopEnabled','trailingStopPct',
+  'mtfConfirmationEnabled','mtfTimeframe','volumeFilterEnabled','volumeMinRatio',
+  'regimeDetectionEnabled','dynamicSizingEnabled','minPositionSizeMult',
+  'maxPositionSizeMult','maxHoldHoursEnabled','maxHoldHours',
+];
+
+// Combineert de globale strategy met de per-coin override (indien
+// aanwezig) tot één effectief strategy-object voor deze coin. Dit is
+// de enige plek die coin-specifieke instellingen kent — alle bestaande
+// code (getSignal, runBot, backtest) blijft simpelweg 'strategy.X'
+// gebruiken, maar dan via dit resolved object voor een specifieke coin.
+function getEffectiveStrategy(sym){
+  const override = coinOverrides[sym];
+  if(!override || Object.keys(override).length===0) return strategy;
+  return { ...strategy, ...override };
+}
+
+function hasCoinOverride(sym){
+  return !!(coinOverrides[sym] && Object.keys(coinOverrides[sym]).length>0);
+}
+
+function setCoinOverride(sym, partialSettings){
+  coinOverrides[sym] = { ...(coinOverrides[sym]||{}), ...partialSettings };
+  localStorage.setItem('tb_coin_overrides', JSON.stringify(coinOverrides));
+}
+function clearCoinOverride(sym){
+  delete coinOverrides[sym];
+  localStorage.setItem('tb_coin_overrides', JSON.stringify(coinOverrides));
+}
 
 // Houdt per coin de hoogst bereikte prijs bij sinds aankoop — nodig
 // voor de trailing stop-loss berekening
@@ -1123,26 +1199,27 @@ function detectCustom(sym){
 // SIGNAL ENGINE
 // ══════════════════════════════════════════════════════
 function getSignal(sym){
+  const s = getEffectiveStrategy(sym); // per-coin instellingen indien aanwezig, anders globaal
   const ind=getInd(sym);
   const liveCandles = candles[sym]||[];
   const builtIn=detectBuiltIn(liveCandles);
   const custom=detectCustom(sym);
-  const activePats=builtIn.filter(p=>strategy.activePatterns.includes(p));
+  const activePats=builtIn.filter(p=>s.activePatterns.includes(p));
   const pb=patternBias(activePats);
   let bull=0,bear=0,reasons=[];
 
   // RSI
-  if(ind.rsi!=null&&(strategy.indicator==='RSI'||strategy.indicator==='Combined')){
-    if(ind.rsi<strategy.rsiOversold){bull+=2;reasons.push(`RSI ${ind.rsi.toFixed(0)} oversold`);}
-    else if(ind.rsi>strategy.rsiOverbought){bear+=2;reasons.push(`RSI ${ind.rsi.toFixed(0)} overbought`);}
+  if(ind.rsi!=null&&(s.indicator==='RSI'||s.indicator==='Combined')){
+    if(ind.rsi<s.rsiOversold){bull+=2;reasons.push(`RSI ${ind.rsi.toFixed(0)} oversold`);}
+    else if(ind.rsi>s.rsiOverbought){bear+=2;reasons.push(`RSI ${ind.rsi.toFixed(0)} overbought`);}
     else reasons.push(`RSI ${ind.rsi.toFixed(0)}`);
   }
   // MA
-  if(ind.sma20&&ind.sma50&&(strategy.indicator==='MA'||strategy.indicator==='Combined')){
+  if(ind.sma20&&ind.sma50&&(s.indicator==='MA'||s.indicator==='Combined')){
     if(ind.sma20>ind.sma50){bull++;reasons.push('MA20>MA50');}else{bear++;reasons.push('MA20<MA50');}
   }
   // Built-in patterns
-  if(strategy.indicator==='Pattern'||strategy.indicator==='Combined'){
+  if(s.indicator==='Pattern'||s.indicator==='Combined'){
     bull+=pb.bull;bear+=pb.bear;
     if(activePats.length)reasons.push(activePats.map(p=>PATTERN_DEFS[p]?.emoji).join(''));
   }
@@ -1158,10 +1235,10 @@ function getSignal(sym){
   // score in plaats van het signaal volledig te negeren, zodat het
   // nog wel meetelt maar minder zwaar.
   let volumeRatio = null, volumeConfirmed = true;
-  if(strategy.volumeFilterEnabled){
+  if(s.volumeFilterEnabled){
     volumeRatio = getVolumeRatio(liveCandles);
     if(volumeRatio !== null){
-      volumeConfirmed = volumeRatio >= strategy.volumeMinRatio;
+      volumeConfirmed = volumeRatio >= s.volumeMinRatio;
       if(!volumeConfirmed){
         bull = bull*0.5; bear = bear*0.5; // signaal halveren, niet wegvegen
         reasons.push(`Vol ${volumeRatio.toFixed(1)}x (laag)`);
@@ -1176,8 +1253,8 @@ function getSignal(sym){
   // het signaal richting neutraal — voorkomt 5min-koopjes tegen een
   // bearish daggrafiek in.
   let mtfAgree = true, mtfDirection = null;
-  if(strategy.mtfConfirmationEnabled){
-    const htf = htfCandles[sym]?.[strategy.mtfTimeframe];
+  if(s.mtfConfirmationEnabled){
+    const htf = htfCandles[sym]?.[s.mtfTimeframe];
     if(htf && htf.length >= 26){
       const htfCloses = htf.map(c=>c.c);
       const htfRsi = rsiCalc(htfCloses);
@@ -1191,9 +1268,9 @@ function getSignal(sym){
       if(liveDirection!=='neutral' && mtfDirection!=='neutral' && liveDirection!==mtfDirection){
         mtfAgree = false;
         bull = bull*0.3; bear = bear*0.3; // sterk dempen bij tegenspraak
-        reasons.push(`${strategy.mtfTimeframe} spreekt tegen`);
+        reasons.push(`${s.mtfTimeframe} spreekt tegen`);
       } else if(liveDirection!=='neutral' && liveDirection===mtfDirection){
-        reasons.push(`${strategy.mtfTimeframe} bevestigt`);
+        reasons.push(`${s.mtfTimeframe} bevestigt`);
       }
     }
   }
@@ -1203,10 +1280,10 @@ function getSignal(sym){
   // werkt MA-crossover beter. We geven een lichte boost aan de
   // indicator die bij het huidige regime past.
   let regime = 'unknown';
-  if(strategy.regimeDetectionEnabled){
+  if(s.regimeDetectionEnabled){
     regime = detectMarketRegime(liveCandles);
-    if(regime==='range' && ind.rsi!=null && (ind.rsi<strategy.rsiOversold||ind.rsi>strategy.rsiOverbought)){
-      if(ind.rsi<strategy.rsiOversold) bull+=1; else bear+=1;
+    if(regime==='range' && ind.rsi!=null && (ind.rsi<s.rsiOversold||ind.rsi>s.rsiOverbought)){
+      if(ind.rsi<s.rsiOversold) bull+=1; else bear+=1;
       reasons.push('Range-markt (RSI-boost)');
     } else if(regime==='trend' && ind.sma20 && ind.sma50){
       if(ind.sma20>ind.sma50) bull+=1; else bear+=1;
@@ -1225,11 +1302,12 @@ function getSignal(sym){
   const scoreDiff = Math.abs(bull-bear);
   const maxPossibleScore = 8; // ruwe normalisatie-aanname
   let strength = Math.min(1, scoreDiff/maxPossibleScore);
-  if(strategy.volumeFilterEnabled && volumeRatio!==null && !volumeConfirmed) strength *= 0.6;
-  if(strategy.mtfConfirmationEnabled && !mtfAgree) strength *= 0.5;
+  if(s.volumeFilterEnabled && volumeRatio!==null && !volumeConfirmed) strength *= 0.6;
+  if(s.mtfConfirmationEnabled && !mtfAgree) strength *= 0.5;
 
   return{signal,color,icon,reasons,ind,patterns:builtIn,custom,
-    volumeRatio,volumeConfirmed,mtfAgree,mtfDirection,regime,strength};
+    volumeRatio,volumeConfirmed,mtfAgree,mtfDirection,regime,strength,
+    usedStrategy:s, hasOverride:hasCoinOverride(sym)};
 }
 
 // ══════════════════════════════════════════════════════
@@ -1296,8 +1374,9 @@ function renderMarkets(){
     const bi=detectBuiltIn(candles[sym]||[]).filter(x=>strategy.activePatterns.includes(x));
     const allPats=[...bi.map(p2=>PATTERN_DEFS[p2]?.emoji||''),...custom.map(c=>(c.emoji||'🎯'))];
     const patBadge=allPats.length?`<span style="font-size:12px">${allPats.join('')}</span>`:'';
+    const strategyBadge=hasCoinOverride(sym)?`<span style="font-size:9px;background:var(--amber)22;color:var(--amber);padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">🎯 EIGEN</span>`:'';
     return`<div class="market-row" onclick="openAnalyse('${sym}')">
-      <div><div style="font-weight:700;font-size:15px">${sym==='XAU/USD'?'🥇 ':''} ${sym} ${patBadge}</div>
+      <div><div style="font-weight:700;font-size:15px">${sym==='XAU/USD'?'🥇 ':''} ${sym} ${patBadge}${strategyBadge}</div>
       <span style="font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;background:${m.color}22;color:${m.color}">${TYPE_LABEL[m.type]}</span></div>
       <div style="margin:0 8px">${sparkSVG(h.slice(-20),chg>=0?'#00d68f':'#ff4757')}</div>
       <div><div style="font-weight:700;font-size:15px;text-align:right">${fmtP(p)}</div>
@@ -1312,7 +1391,8 @@ function renderMarkets(){
 function openAnalyse(sym){currentPair=sym;showPage('analyse',document.querySelectorAll('.nav-btn')[1]);renderAnalyse();}
 function renderAnalyse(){
   const sym=currentPair;
-  document.getElementById('analyse-title').textContent=sym==='XAU/USD'?'🥇 '+sym:sym;
+  const overrideTag = hasCoinOverride(sym) ? ' <span style="font-size:10px;background:var(--amber)22;color:var(--amber);padding:2px 7px;border-radius:4px;font-weight:700;vertical-align:middle">🎯 EIGEN STRATEGIE</span>' : '';
+  document.getElementById('analyse-title').innerHTML=(sym==='XAU/USD'?'🥇 '+sym:sym)+overrideTag;
   const tfs=['5m','1h','1d','1w'],tfL={'5m':'5min','1h':'1uur','1d':'Dag','1w':'Week'};
   document.getElementById('tf-summary').innerHTML=tfs.map(t=>{
     const s=getSignal(sym);
@@ -1447,6 +1527,7 @@ function runBot(){
   const now = Date.now();
   strategy.markets.forEach(sym=>{
     const price=prices[sym];if(!price)return;
+    const es = getEffectiveStrategy(sym); // per-coin instellingen (of globaal als geen override)
 
     const pos=openPositions[sym];
     if(pos){
@@ -1454,7 +1535,7 @@ function runBot(){
       // Houd de hoogste prijs sinds aankoop bij; de trailing stop
       // volgt deze omhoog mee en blokkeert zo winst in plaats van
       // alleen verlies te beperken.
-      if(strategy.trailingStopEnabled){
+      if(es.trailingStopEnabled){
         const hwm = trailingHighWaterMark[sym] || pos.entryPrice;
         if(price > hwm){
           trailingHighWaterMark[sym] = price;
@@ -1467,23 +1548,23 @@ function runBot(){
       // nooit dat een verlies-beperkende verkoop wordt tegengehouden.
       const pct=((price-pos.entryPrice)/pos.entryPrice)*100;
 
-      if(strategy.trailingStopEnabled){
+      if(es.trailingStopEnabled){
         const hwm = trailingHighWaterMark[sym] || pos.entryPrice;
         const trailPct = ((price-hwm)/hwm)*100;
-        if(trailPct <= -strategy.trailingStopPct){
+        if(trailPct <= -es.trailingStopPct){
           executeSell(sym,price,pos,'Trailing Stop');
           return;
         }
       }
-      if(pct<=-strategy.stopLoss){executeSell(sym,price,pos,'Stop-Loss');return;}
-      else if(pct>=strategy.takeProfit){executeSell(sym,price,pos,'Take-Profit');return;}
+      if(pct<=-es.stopLoss){executeSell(sym,price,pos,'Stop-Loss');return;}
+      else if(pct>=es.takeProfit){executeSell(sym,price,pos,'Take-Profit');return;}
 
       // ── Tijd-gebaseerde exit ──────────────────────────────────────
       // Als een positie te lang vastzit zonder stop-loss/take-profit
       // te raken, komt het kapitaal vrij voor betere kansen elders.
-      if(strategy.maxHoldHoursEnabled && pos.openedAt){
+      if(es.maxHoldHoursEnabled && pos.openedAt){
         const hoursOpen = (now - pos.openedAt) / (1000*60*60);
-        if(hoursOpen >= strategy.maxHoldHours){
+        if(hoursOpen >= es.maxHoldHours){
           executeSell(sym,price,pos,'Max. houdtijd bereikt');
           return;
         }
@@ -1494,11 +1575,12 @@ function runBot(){
     // Cooldown blokkeert alleen NIEUWE aankopen, nooit verkopen
     if(liveErrorCooldown[sym] && liveErrorCooldown[sym] > now) return;
 
-    // ── Portfolio-niveau risicobeheer ──────────────────────────────
+    // ── Portfolio-niveau risicobeheer (altijd globaal, niet per coin) ──
     // Geen nieuwe positie openen als we al op het max. aantal open
     // posities zitten, of als de totale crypto-blootstelling al boven
     // de ingestelde grens zit — beschermt tegen overconcentratie bij
-    // een markt-brede crash.
+    // een markt-brede crash. Dit blijft bewust globaal: het gaat over
+    // de hele portfolio, niet over één coin.
     const openCount = Object.keys(openPositions).length;
     if(openCount >= strategy.maxOpenPositions) return;
 
@@ -1508,12 +1590,12 @@ function runBot(){
     // werkelijkheid grotendeels hetzelfde risico).
     if(strategy.correlationLimitEnabled){
       const group = getCorrelationGroup(sym);
-      const sameGroupCount = Object.keys(openPositions).filter(s=>getCorrelationGroup(s)===group).length;
+      const sameGroupCount = Object.keys(openPositions).filter(gs=>getCorrelationGroup(gs)===group).length;
       if(sameGroupCount >= strategy.maxPositionsPerGroup) return;
     }
 
     const tv = totalValue();
-    const currentExposure = Object.entries(openPositions).reduce((a,[s,p])=>a+(p.qty*(prices[s]||p.entryPrice)),0);
+    const currentExposure = Object.entries(openPositions).reduce((a,[ps,p])=>a+(p.qty*(prices[ps]||p.entryPrice)),0);
     const exposurePct = tv>0 ? (currentExposure/tv)*100 : 0;
     if(exposurePct >= strategy.maxPortfolioExposurePct) return;
 
@@ -1524,14 +1606,14 @@ function runBot(){
     if(hasCritical&&sig.signal!=='VERKOPEN'){shouldBuy=true;reason='🔥 '+custom.find(c=>c.priority==='critical').name;}
     else if(sig.signal==='KOPEN'){shouldBuy=true;reason=sig.reasons[0]||'Signaal';}
     if(shouldBuy){
-      let spend=cash*(strategy.positionSize/100);if(spend<1)return;
+      let spend=cash*(es.positionSize/100);if(spend<1)return;
 
       // ── Signaalsterkte-gebaseerde position sizing ───────────────
       // Een sterker signaal (hoge bull/bear-score, bevestigd door
       // volume en hogere timeframe) krijgt een grotere positie; een
       // marginaal signaal een kleinere.
-      if(strategy.dynamicSizingEnabled){
-        const mult = strategy.minPositionSizeMult + sig.strength*(strategy.maxPositionSizeMult-strategy.minPositionSizeMult);
+      if(es.dynamicSizingEnabled){
+        const mult = es.minPositionSizeMult + sig.strength*(es.maxPositionSizeMult-es.minPositionSizeMult);
         spend = spend * mult;
         reason += ` (${mult.toFixed(1)}x grootte, sterkte ${(sig.strength*100).toFixed(0)}%)`;
       }
@@ -1688,7 +1770,8 @@ function addTrade(t){trades.unshift({...t,ts:new Date().toLocaleTimeString('nl-N
 function addLog(msg){botLog.unshift({msg,ts:new Date().toLocaleTimeString('nl-NL')});botLog=botLog.slice(0,100);}
 async function manualBuy(){
   const sym=currentPair,price=prices[sym];if(!price)return;
-  const spend=cash*(strategy.positionSize/100);if(spend<1){toast('Niet genoeg cash','#ff4757');return;}
+  const es = getEffectiveStrategy(sym);
+  const spend=cash*(es.positionSize/100);if(spend<1){toast('Niet genoeg cash','#ff4757');return;}
 
   if(tradingMode==='live'){
     if(liveErrorCooldown[sym] && liveErrorCooldown[sym] > Date.now()){
@@ -1908,7 +1991,50 @@ function renderTrades(){
 function renderPatternsPage(){
   renderCustomPatternsList();
   renderPatternToggles();
+  renderCoinOverridesList();
 }
+
+// ── Per-coin overrides overzicht ─────────────────────────────────────
+// Toont welke coins een eigen, via optimalisatie gevonden strategie
+// hebben, met de belangrijkste afwijkende waarden en een knop om de
+// override weer te verwijderen (dan valt de coin terug op globaal).
+function renderCoinOverridesList(){
+  const el = document.getElementById('coin-overrides-list');
+  if(!el) return;
+  const syms = Object.keys(coinOverrides).filter(s=>hasCoinOverride(s));
+  if(syms.length===0){
+    el.innerHTML = '<div style="color:var(--dim);font-size:13px">Nog geen coin met een eigen strategie. Gebruik "Automatisch optimaliseren" in de backtest om er een te vinden.</div>';
+    return;
+  }
+  const labels = {
+    indicator:'Indicator', rsiOversold:'RSI Oversold', rsiOverbought:'RSI Overbought',
+    stopLoss:'Stop-Loss', takeProfit:'Take-Profit', positionSize:'Positiegrootte',
+    trailingStopEnabled:'Trailing Stop',
+  };
+  el.innerHTML = syms.map(sym=>{
+    const ov = coinOverrides[sym];
+    const m = MARKETS[sym];
+    const summary = Object.entries(ov).slice(0,4).map(([k,v])=>{
+      const unit = ['rsiOversold','rsiOverbought','stopLoss','takeProfit','positionSize'].includes(k)?'%':'';
+      const disp = typeof v==='boolean' ? (v?'aan':'uit') : v+unit;
+      return `${labels[k]||k}: ${disp}`;
+    }).join(' · ');
+    return `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-weight:700;font-size:13px">${m?.type==='commodity'?'🥇 ':''}${sym}</span>
+        <button onclick="removeCoinOverride('${sym}')" style="background:var(--red)22;border:1px solid var(--red)44;color:var(--red);border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">✕ Verwijder</button>
+      </div>
+      <div style="font-size:11px;color:var(--sub);line-height:1.5">${summary}</div>
+    </div>`;
+  }).join('');
+}
+function removeCoinOverride(sym){
+  if(!confirm(`Eigen strategie voor ${sym} verwijderen? Deze coin gebruikt daarna weer de globale instellingen.`)) return;
+  clearCoinOverride(sym);
+  renderCoinOverridesList();
+  toast(`${sym} gebruikt weer de globale strategie`);
+}
+
 function renderCustomPatternsList(){
   const el=document.getElementById('custom-patterns-list');if(!el)return;
   if(customPatterns.length===0){
@@ -2208,24 +2334,39 @@ let btRunning = false;
 function openBacktest(){
   const sel = document.getElementById('bt-market');
   sel.innerHTML = Object.keys(MARKETS).filter(s=>s!=='XAU/USD'&&s!=='AAPL'&&s!=='EUR/USD')
-    .map(s=>`<option value="${s}">${s}</option>`).join('');
+    .map(s=>`<option value="${s}">${s}${hasCoinOverride(s)?' 🎯':''}</option>`).join('');
   sel.value = currentPair && MARKETS[currentPair] ? currentPair : strategy.markets[0];
+  sel.onchange = updateBacktestSummary;
 
-  document.getElementById('bt-summary-strategy').textContent = strategy.indicator;
-  document.getElementById('bt-summary-sl').textContent = strategy.stopLoss+'%';
-  document.getElementById('bt-summary-tp').textContent = strategy.takeProfit+'%';
-  document.getElementById('bt-summary-trail').textContent = strategy.trailingStopEnabled ? `aan (${strategy.trailingStopPct}%)` : 'uit';
-  document.getElementById('bt-summary-fee').textContent = strategy.takerFeePct+'%';
-  document.getElementById('bt-summary-slip').textContent = strategy.slippagePct+'%';
-  document.getElementById('bt-summary-mtf').textContent = strategy.mtfConfirmationEnabled ? `aan (${strategy.mtfTimeframe})` : 'uit';
-  document.getElementById('bt-summary-vol').textContent = strategy.volumeFilterEnabled ? `aan (min ${strategy.volumeMinRatio}x)` : 'uit';
-  document.getElementById('bt-summary-regime').textContent = strategy.regimeDetectionEnabled ? 'aan' : 'uit';
-  document.getElementById('bt-summary-sizing').textContent = strategy.dynamicSizingEnabled ? `aan (${strategy.minPositionSizeMult}x-${strategy.maxPositionSizeMult}x)` : 'uit';
-  document.getElementById('bt-summary-hold').textContent = strategy.maxHoldHoursEnabled ? `${strategy.maxHoldHours}u` : 'uit';
+  updateBacktestSummary();
 
   document.getElementById('backtest-setup').style.display = 'block';
   document.getElementById('backtest-results').style.display = 'none';
   document.getElementById('backtest-overlay').style.display = 'flex';
+}
+
+// Toont de instellingen die DEZE specifieke coin daadwerkelijk zou
+// gebruiken — dus inclusief een eventuele per-coin override. Wordt
+// opnieuw aangeroepen als de gebruiker een andere coin selecteert.
+function updateBacktestSummary(){
+  const sym = document.getElementById('bt-market').value;
+  const s = getEffectiveStrategy(sym);
+  const overrideNote = document.getElementById('bt-override-note');
+  if(overrideNote){
+    overrideNote.style.display = hasCoinOverride(sym) ? 'block' : 'none';
+  }
+
+  document.getElementById('bt-summary-strategy').textContent = s.indicator;
+  document.getElementById('bt-summary-sl').textContent = s.stopLoss+'%';
+  document.getElementById('bt-summary-tp').textContent = s.takeProfit+'%';
+  document.getElementById('bt-summary-trail').textContent = s.trailingStopEnabled ? `aan (${s.trailingStopPct}%)` : 'uit';
+  document.getElementById('bt-summary-fee').textContent = s.takerFeePct+'%';
+  document.getElementById('bt-summary-slip').textContent = s.slippagePct+'%';
+  document.getElementById('bt-summary-mtf').textContent = s.mtfConfirmationEnabled ? `aan (${s.mtfTimeframe})` : 'uit';
+  document.getElementById('bt-summary-vol').textContent = s.volumeFilterEnabled ? `aan (min ${s.volumeMinRatio}x)` : 'uit';
+  document.getElementById('bt-summary-regime').textContent = s.regimeDetectionEnabled ? 'aan' : 'uit';
+  document.getElementById('bt-summary-sizing').textContent = s.dynamicSizingEnabled ? `aan (${s.minPositionSizeMult}x-${s.maxPositionSizeMult}x)` : 'uit';
+  document.getElementById('bt-summary-hold').textContent = s.maxHoldHoursEnabled ? `${s.maxHoldHours}u` : 'uit';
 }
 function closeBacktest(){
   document.getElementById('backtest-overlay').style.display = 'none';
@@ -2244,30 +2385,31 @@ function setBacktestInterval(iv){
 // werkt op een vaste candle-array in plaats van de live 'candles[sym]'
 // state, zodat we door de geschiedenis kunnen lopen zonder de live
 // app-state te raken.
-function btGetSignal(closesSoFar, candlesSoFar, htfCandlesSoFar){
+function btGetSignal(closesSoFar, candlesSoFar, htfCandlesSoFar, s){
+  s = s || strategy; // optioneel een specifiek strategy-object meegeven (per-coin of optimalisatie-combo)
   const r = rsiCalc(closesSoFar);
   const s20 = sma(closesSoFar,20), s50 = sma(closesSoFar,50);
-  const builtInPatterns = detectBuiltIn(candlesSoFar).filter(p=>strategy.activePatterns.includes(p));
+  const builtInPatterns = detectBuiltIn(candlesSoFar).filter(p=>s.activePatterns.includes(p));
   const pb = patternBias(builtInPatterns);
   let bull=0,bear=0;
 
-  if(r!=null && (strategy.indicator==='RSI'||strategy.indicator==='Combined')){
-    if(r<strategy.rsiOversold) bull+=2;
-    else if(r>strategy.rsiOverbought) bear+=2;
+  if(r!=null && (s.indicator==='RSI'||s.indicator==='Combined')){
+    if(r<s.rsiOversold) bull+=2;
+    else if(r>s.rsiOverbought) bear+=2;
   }
-  if(s20&&s50&&(strategy.indicator==='MA'||strategy.indicator==='Combined')){
+  if(s20&&s50&&(s.indicator==='MA'||s.indicator==='Combined')){
     if(s20>s50) bull++; else bear++;
   }
-  if(strategy.indicator==='Pattern'||strategy.indicator==='Combined'){
+  if(s.indicator==='Pattern'||s.indicator==='Combined'){
     bull+=pb.bull; bear+=pb.bear;
   }
 
   // Volume-filter — zelfde logica als de live bot
   let volumeConfirmed = true;
-  if(strategy.volumeFilterEnabled){
+  if(s.volumeFilterEnabled){
     const volRatio = getVolumeRatio(candlesSoFar);
     if(volRatio !== null){
-      volumeConfirmed = volRatio >= strategy.volumeMinRatio;
+      volumeConfirmed = volRatio >= s.volumeMinRatio;
       if(!volumeConfirmed){ bull*=0.5; bear*=0.5; }
     }
   }
@@ -2275,7 +2417,7 @@ function btGetSignal(closesSoFar, candlesSoFar, htfCandlesSoFar){
   // Multi-timeframe bevestiging — gebruikt de meegegeven, apart
   // opgehaalde hogere-timeframe candle-array t/m hetzelfde moment
   let mtfAgree = true;
-  if(strategy.mtfConfirmationEnabled && htfCandlesSoFar && htfCandlesSoFar.length >= 26){
+  if(s.mtfConfirmationEnabled && htfCandlesSoFar && htfCandlesSoFar.length >= 26){
     const htfCloses = htfCandlesSoFar.map(c=>c.c);
     const htfRsi = rsiCalc(htfCloses);
     const htfS20 = sma(htfCloses,20), htfS50 = sma(htfCloses,50);
@@ -2290,10 +2432,10 @@ function btGetSignal(closesSoFar, candlesSoFar, htfCandlesSoFar){
   }
 
   // Market regime — lichte boost net als in de live bot
-  if(strategy.regimeDetectionEnabled){
+  if(s.regimeDetectionEnabled){
     const regime = detectMarketRegime(candlesSoFar);
-    if(regime==='range' && r!=null && (r<strategy.rsiOversold||r>strategy.rsiOverbought)){
-      if(r<strategy.rsiOversold) bull+=1; else bear+=1;
+    if(regime==='range' && r!=null && (r<s.rsiOversold||r>s.rsiOverbought)){
+      if(r<s.rsiOversold) bull+=1; else bear+=1;
     } else if(regime==='trend' && s20 && s50){
       if(s20>s50) bull+=1; else bear+=1;
     }
@@ -2313,7 +2455,11 @@ function btGetSignal(closesSoFar, candlesSoFar, htfCandlesSoFar){
 }
 
 // ── De eigenlijke backtest-simulatie ─────────────────────────────────
-function simulateBacktest(candles, startCapital, htfCandles){
+// 's' is optioneel: een specifiek strategy-object (per-coin override
+// of een optimalisatie-combo). Zonder meegegeven 's' valt dit terug
+// op de globale 'strategy', zoals voorheen.
+function simulateBacktest(candles, startCapital, htfCandles, s){
+  s = s || strategy;
   let cash = startCapital;
   let position = null; // { qty, entryPrice, hwm, openedAt }
   const trades = [];
@@ -2328,22 +2474,22 @@ function simulateBacktest(candles, startCapital, htfCandles){
 
     if(position){
       // Trailing stop bijhouden
-      if(strategy.trailingStopEnabled && price > position.hwm) position.hwm = price;
+      if(s.trailingStopEnabled && price > position.hwm) position.hwm = price;
 
       const pct = ((price-position.entryPrice)/position.entryPrice)*100;
       let exitReason = null;
 
-      if(strategy.trailingStopEnabled){
+      if(s.trailingStopEnabled){
         const trailPct = ((price-position.hwm)/position.hwm)*100;
-        if(trailPct <= -strategy.trailingStopPct) exitReason = 'Trailing Stop';
+        if(trailPct <= -s.trailingStopPct) exitReason = 'Trailing Stop';
       }
-      if(!exitReason && pct <= -strategy.stopLoss) exitReason = 'Stop-Loss';
-      else if(!exitReason && pct >= strategy.takeProfit) exitReason = 'Take-Profit';
+      if(!exitReason && pct <= -s.stopLoss) exitReason = 'Stop-Loss';
+      else if(!exitReason && pct >= s.takeProfit) exitReason = 'Take-Profit';
 
       // Tijd-gebaseerde exit — zelfde logica als de live bot
-      if(!exitReason && strategy.maxHoldHoursEnabled && position.openedAt){
+      if(!exitReason && s.maxHoldHoursEnabled && position.openedAt){
         const hoursOpen = (c.t - position.openedAt) / (1000*60*60);
-        if(hoursOpen >= strategy.maxHoldHours) exitReason = 'Max. houdtijd bereikt';
+        if(hoursOpen >= s.maxHoldHours) exitReason = 'Max. houdtijd bereikt';
       }
 
       if(exitReason){
@@ -2366,13 +2512,13 @@ function simulateBacktest(candles, startCapital, htfCandles){
         htfSoFar = htfCandles.filter(hc => hc.t <= c.t);
       }
 
-      const { signal, strength } = btGetSignal(closes, candlesSoFar, htfSoFar);
+      const { signal, strength } = btGetSignal(closes, candlesSoFar, htfSoFar, s);
       if(signal === 'KOPEN'){
-        let spend = cash * (strategy.positionSize/100);
+        let spend = cash * (s.positionSize/100);
 
         // Signaalsterkte-gebaseerde sizing — zelfde logica als live
-        if(strategy.dynamicSizingEnabled){
-          const mult = strategy.minPositionSizeMult + strength*(strategy.maxPositionSizeMult-strategy.minPositionSizeMult);
+        if(s.dynamicSizingEnabled){
+          const mult = s.minPositionSizeMult + strength*(s.maxPositionSizeMult-s.minPositionSizeMult);
           spend = spend * mult;
         }
 
@@ -2395,6 +2541,262 @@ function simulateBacktest(candles, startCapital, htfCandles){
 }
 
 // ── Backtest uitvoeren (haalt candles op en draait de simulatie) ────
+// ══════════════════════════════════════════════════════
+// AUTOMATISCHE OPTIMALISATIE — grid search over instellingen
+// ══════════════════════════════════════════════════════
+// Test een groot aantal combinaties van de belangrijkste strategie-
+// parameters op dezelfde historische candle-set (1x opgehaald, dan
+// lokaal duizenden keren gesimuleerd — snel, geen extra API-calls).
+// Kiest de combinatie met het beste rendement en past 'strategy'
+// automatisch aan naar die winnende instellingen.
+let optimizationRunning = false;
+let originalStrategySnapshot = null; // strategy-staat vóór optimalisatie, voor vergelijking in de UI
+
+// Het te doorzoeken parameter-grid. Bewust beperkt tot de instellingen
+// met de meeste invloed op rendement, om de zoekruimte haalbaar te
+// houden in de browser (vooral op mobiel) — dit grid geeft 972
+// combinaties, wat op de meeste telefoons binnen 10-20 seconden klaar is.
+const OPTIMIZATION_GRID = {
+  indicator:      ['RSI','MA','Combined'],
+  rsiOversold:    [25, 30, 35],
+  rsiOverbought:  [65, 70, 75],
+  stopLoss:       [3, 5, 8],
+  takeProfit:     [8, 12, 18],
+  positionSize:   [10, 20],
+  trailingStopEnabled: [false, true],
+};
+
+function generateCombinations(grid){
+  const keys = Object.keys(grid);
+  let combos = [{}];
+  keys.forEach(key => {
+    const next = [];
+    combos.forEach(combo => {
+      grid[key].forEach(val => {
+        next.push({ ...combo, [key]: val });
+      });
+    });
+    combos = next;
+  });
+  return combos;
+}
+
+// Score een backtest-resultaat tot één getal om combinaties te
+// rangschikken. Puur op eindrendement zou overfitten op een paar
+// gelukstreffers met enorme drawdown — daarom corrigeren we voor
+// risico (vergelijkbaar idee als een Sharpe-achtige verhouding).
+function scoreResult(result, startCapital){
+  const pnl = result.finalValue - startCapital;
+  const pct = (pnl/startCapital)*100;
+  let peak = startCapital, maxDD = 0;
+  result.equityCurve.forEach(p=>{
+    if(p.value>peak) peak=p.value;
+    const dd = ((peak-p.value)/peak)*100;
+    if(dd>maxDD) maxDD=dd;
+  });
+  const sellTrades = result.trades.filter(t=>t.pnl!=null);
+  // Te weinig trades = onbetrouwbaar resultaat, zwaar afstraffen
+  if(sellTrades.length < 3) return { score: pct - 1000, pct, maxDD, tradeCount: sellTrades.length };
+  // Rendement gecorrigeerd voor drawdown — hoge drawdown drukt de score
+  const score = pct - (maxDD * 0.5);
+  return { score, pct, maxDD, tradeCount: sellTrades.length };
+}
+
+async function runOptimization(){
+  if(optimizationRunning) return;
+  const sym = document.getElementById('bt-market').value;
+  const startCapital = parseFloat(document.getElementById('bt-capital').value) || 10000;
+
+  if(!window._bvConnected || !window._bvClient){
+    toast('⚠️ Verbind eerst Bitvavo om historische data op te halen','#ff4757');
+    return;
+  }
+  if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
+    toast(`${sym} wordt niet ondersteund door Bitvavo`,'#ff4757');
+    return;
+  }
+
+  optimizationRunning = true;
+  const btn = document.getElementById('bt-optimize-btn');
+  const runBtn = document.getElementById('bt-run-btn');
+  btn.disabled = true; runBtn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Historische data ophalen...';
+
+  // Basis voor de zoekruimte is de HUIDIGE effectieve strategie voor
+  // deze specifieke coin (dus inclusief een bestaande per-coin
+  // override, als die er al was) — niet meer de globale strategy
+  // direct muteren tijdens het zoeken.
+  const baseStrategy = { ...getEffectiveStrategy(sym) };
+  originalStrategySnapshot = baseStrategy;
+
+  try{
+    const candlesPerDay = { '15m':96, '1h':24, '4h':6 }[btInterval] || 24;
+    const limit = Math.min(1440, candlesPerDay * btPeriodDays);
+    const candles = await window._bvClient.getCandles(sym, btInterval, limit);
+    if(!candles || candles.length < 30){
+      throw new Error('Niet genoeg historische data beschikbaar voor deze periode/interval');
+    }
+
+    let htfForOpt = null;
+    if(baseStrategy.mtfConfirmationEnabled){
+      try{
+        const htfCandlesPerDay = { '15m':96,'1h':24,'4h':6,'1d':1 }[baseStrategy.mtfTimeframe] || 24;
+        const htfLimit = Math.min(1440, Math.max(60, htfCandlesPerDay*btPeriodDays + 50));
+        htfForOpt = await window._bvClient.getCandles(sym, baseStrategy.mtfTimeframe, htfLimit);
+      } catch(err){ /* zonder HTF verder gaan is acceptabel hier */ }
+    }
+
+    const combos = generateCombinations(OPTIMIZATION_GRID);
+    const total = combos.length;
+    let results = [];
+
+    btn.innerHTML = `<span class="spinner"></span> Combinatie 0/${total}...`;
+
+    // Combinaties in batches verwerken zodat de UI tussendoor kan
+    // updaten (anders bevriest het scherm bij honderden simulaties).
+    // Elke combo wordt samengevoegd MET de baseStrategy (niet de
+    // globale strategy) — zo blijft de globale staat ongemoeid tijdens
+    // het zoeken en testen we steeds vanaf deze coin se eigen basis.
+    const BATCH_SIZE = 25;
+    for(let i=0; i<combos.length; i+=BATCH_SIZE){
+      const batch = combos.slice(i, i+BATCH_SIZE);
+      batch.forEach(combo => {
+        const testStrategy = { ...baseStrategy, ...combo };
+        const result = simulateBacktest(candles, startCapital, htfForOpt, testStrategy);
+        const scored = scoreResult(result, startCapital);
+        results.push({ combo, ...scored });
+      });
+      btn.innerHTML = `<span class="spinner"></span> Combinatie ${Math.min(i+BATCH_SIZE,total)}/${total}...`;
+      await new Promise(r=>setTimeout(r, 0)); // UI-thread even laten ademen
+    }
+
+    // Sorteer op score, beste eerst
+    results.sort((a,b)=>b.score-a.score);
+    const best = results[0];
+    const baseline = scoreResult(simulateBacktest(candles, startCapital, htfForOpt, baseStrategy), startCapital);
+
+    renderOptimizationResults(results.slice(0,10), best, baseline, sym, candles, startCapital, htfForOpt);
+  } catch(err){
+    toast('❌ Optimalisatie mislukt: ' + err.message, '#ff4757');
+  } finally {
+    optimizationRunning = false;
+    btn.disabled = false; runBtn.disabled = false;
+    btn.innerHTML = '🔬 Automatisch optimaliseren';
+  }
+}
+
+function renderOptimizationResults(top10, best, baseline, sym, candles, startCapital, htfForOpt){
+  document.getElementById('backtest-setup').style.display = 'none';
+  document.getElementById('backtest-results').style.display = 'none';
+  const el = document.getElementById('optimize-results');
+  el.style.display = 'block';
+
+  const improvement = best.pct - baseline.pct;
+  const periodLabel = `${btPeriodDays} dagen · ${btInterval} candles · ${sym} · ${top10.length>0?Object.keys(OPTIMIZATION_GRID).reduce((a,k)=>a*OPTIMIZATION_GRID[k].length,1):0} combinaties getest`;
+
+  el.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:0.8px">${periodLabel}</div>
+      <div style="font-size:13px;color:var(--sub);margin-top:8px">Beste gevonden rendement</div>
+      <div style="font-size:32px;font-weight:800;color:${best.pct>=0?'var(--green)':'var(--red)'};margin-top:4px">${best.pct>=0?'+':''}${fmt(best.pct,1)}%</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px">vs. ${baseline.pct>=0?'+':''}${fmt(baseline.pct,1)}% met je huidige instellingen
+        ${improvement>0?`<span style="color:var(--green);font-weight:700"> (+${fmt(improvement,1)}% beter)</span>`:improvement<0?`<span style="color:var(--amber);font-weight:700"> (${fmt(improvement,1)}%, huidige was al beter op deze metric)</span>`:''}
+      </div>
+    </div>
+
+    <div class="card" style="margin:0 0 14px;padding:14px;border-color:var(--amber)44">
+      <div class="card-title">🏆 Winnende instellingen</div>
+      ${Object.entries(best.combo).map(([k,v])=>{
+        const labels = {
+          indicator:'Indicator', rsiOversold:'RSI Oversold', rsiOverbought:'RSI Overbought',
+          stopLoss:'Stop-Loss', takeProfit:'Take-Profit', positionSize:'Positiegrootte',
+          trailingStopEnabled:'Trailing Stop'
+        };
+        const unit = ['rsiOversold','rsiOverbought','stopLoss','takeProfit','positionSize'].includes(k) ? '%' : '';
+        const displayVal = typeof v === 'boolean' ? (v?'Aan':'Uit') : v+unit;
+        const changed = originalStrategySnapshot && originalStrategySnapshot[k] !== v;
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+          <span style="color:var(--sub)">${labels[k]||k}</span>
+          <span style="font-weight:700;color:${changed?'var(--amber)':'var(--text)'}">${displayVal}${changed?' ✏️':''}</span>
+        </div>`;
+      }).join('')}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;margin-top:4px">
+        <span style="color:var(--sub)">Max drawdown</span><span style="font-weight:700;color:var(--red)">-${fmt(best.maxDD,1)}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+        <span style="color:var(--sub)">Aantal trades</span><span style="font-weight:700">${best.tradeCount}</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin:0 0 14px;padding:14px">
+      <div class="card-title">Top 10 combinaties</div>
+      <div style="max-height:240px;overflow-y:auto">
+        ${top10.map((r,i)=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:800;color:${i===0?'var(--amber)':'var(--dim)'}">#${i+1}</span>
+              <span style="color:var(--sub)">${r.combo.indicator} · SL${r.combo.stopLoss}/TP${r.combo.takeProfit} · ${r.combo.positionSize}%${r.combo.trailingStopEnabled?' · trail':''}</span>
+            </div>
+            <span style="font-weight:700;color:${r.pct>=0?'var(--green)':'var(--red)'}">${r.pct>=0?'+':''}${fmt(r.pct,1)}%</span>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <button onclick="applyOptimizationResult()" id="apply-optimization-btn" style="width:100%;padding:14px;background:var(--green);border:none;border-radius:12px;color:#000;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px">✓ Pas deze instellingen toe</button>
+    <button onclick="discardOptimizationResult()" style="width:100%;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--sub);font-weight:600;cursor:pointer;margin-bottom:8px">↺ Terug naar backtest</button>
+    <div style="font-size:11px;color:var(--sub);text-align:center;line-height:1.5">
+      ⚠️ Dit is geoptimaliseerd op <b>historische</b> data uit dezelfde periode — geen garantie voor toekomstige resultaten (overfitting-risico). Test de winnende instellingen het liefst ook op een andere periode vóór je live gaat.
+    </div>
+  `;
+
+  // Resultaat onthouden zodat de knoppen weten wat toe te passen, en
+  // voor WELKE coin — dit wordt straks een per-coin override, niet
+  // een wijziging van de globale instellingen.
+  window._pendingOptimization = { sym, combo: best.combo };
+}
+
+function applyOptimizationResult(){
+  if(!window._pendingOptimization){ toast('Geen optimalisatie-resultaat beschikbaar','#ff4757'); return; }
+  const { sym, combo } = window._pendingOptimization;
+  // Sla de winnende combinatie op als PER-COIN override — de bot
+  // gebruikt deze instellingen vanaf nu specifiek voor deze coin,
+  // terwijl andere coins op de globale instellingen blijven draaien
+  // (of hun eigen, eerder geoptimaliseerde override).
+  setCoinOverride(sym, combo);
+  renderCoinOverridesList(); // bijwerken als die lijst zichtbaar is
+  toast(`✓ Eigen strategie opgeslagen voor ${sym}! Andere coins blijven ongewijzigd.`, 'var(--green)');
+  closeBacktest();
+}
+function discardOptimizationResult(){
+  window._pendingOptimization = null;
+  document.getElementById('optimize-results').style.display = 'none';
+  document.getElementById('backtest-setup').style.display = 'block';
+}
+
+// Zet UI-elementen (sliders, actieve knoppen) op de Patronen-pagina
+// gelijk aan de huidige 'strategy'-staat — nodig na het automatisch
+// toepassen van geoptimaliseerde waarden.
+function syncStrategyUIFromState(){
+  setIndicator(strategy.indicator);
+  // Update zowel de slider-positie als het bijbehorende label, zodat
+  // de UI na automatische optimalisatie visueel klopt — alleen het
+  // label bijwerken zou de schuifknop op de oude plek laten staan.
+  const sliderUpdates = [
+    ['slider-pos', 'lbl-pos', strategy.positionSize, '%'],
+    ['slider-sl', 'lbl-sl', strategy.stopLoss, '%'],
+    ['slider-tp', 'lbl-tp', strategy.takeProfit, '%'],
+    ['slider-oversold', 'lbl-oversold', strategy.rsiOversold, ''],
+    ['slider-overbought', 'lbl-overbought', strategy.rsiOverbought, ''],
+  ];
+  sliderUpdates.forEach(([sliderId, labelId, val, suffix])=>{
+    const slider = document.getElementById(sliderId);
+    const label = document.getElementById(labelId);
+    if(slider) slider.value = val;
+    if(label) label.textContent = val+suffix;
+  });
+  updateTrailingToggleUI();
+}
+
 async function runBacktest(){
   if(btRunning) return;
   const sym = document.getElementById('bt-market').value;
@@ -2415,6 +2817,8 @@ async function runBacktest(){
   btn.innerHTML = '<span class="spinner"></span> Historische data ophalen...';
 
   try{
+    const es = getEffectiveStrategy(sym); // gebruik per-coin override indien aanwezig
+
     // Bereken hoeveel candles we nodig hebben voor de gekozen periode + interval
     const candlesPerDay = { '15m':96, '1h':24, '4h':6 }[btInterval] || 24;
     const limit = Math.min(1440, candlesPerDay * btPeriodDays); // Bitvavo max ~1440 per call
@@ -2427,11 +2831,11 @@ async function runBacktest(){
     // Hogere timeframe candles ophalen voor multi-timeframe-bevestiging
     // tijdens de backtest (dekt dezelfde periode, ruim genoeg voor MA50)
     let htfForBacktest = null;
-    if(strategy.mtfConfirmationEnabled){
+    if(es.mtfConfirmationEnabled){
       try{
-        const htfCandlesPerDay = { '15m':96,'1h':24,'4h':6,'1d':1 }[strategy.mtfTimeframe] || 24;
+        const htfCandlesPerDay = { '15m':96,'1h':24,'4h':6,'1d':1 }[es.mtfTimeframe] || 24;
         const htfLimit = Math.min(1440, Math.max(60, htfCandlesPerDay*btPeriodDays + 50));
-        htfForBacktest = await window._bvClient.getCandles(sym, strategy.mtfTimeframe, htfLimit);
+        htfForBacktest = await window._bvClient.getCandles(sym, es.mtfTimeframe, htfLimit);
       } catch(err){
         console.warn('[TradeBot] HTF candles voor backtest niet beschikbaar:', err.message);
       }
@@ -2440,7 +2844,7 @@ async function runBacktest(){
     btn.innerHTML = '<span class="spinner"></span> Simulatie draaien...';
     await new Promise(r=>setTimeout(r, 50)); // UI even laten updaten
 
-    const result = simulateBacktest(candles, startCapital, htfForBacktest);
+    const result = simulateBacktest(candles, startCapital, htfForBacktest, es);
     renderBacktestResults(result, sym, candles);
   } catch(err){
     toast('❌ Backtest mislukt: ' + err.message, '#ff4757');
@@ -2457,6 +2861,11 @@ async function runBacktest(){
 // helemaal geen signaal kwam, etc.) en geeft op basis daarvan
 // onderbouwde, actiegerichte suggesties — geen generieke tips.
 function analyzeBacktest(result, sym, candles){
+  // Shadow de globale 'strategy' lokaal met de effectieve (per-coin)
+  // strategie, zodat alle suggesties hieronder de instellingen tonen
+  // die DEZE coin daadwerkelijk gebruikt — inclusief een eventuele
+  // override — zonder elke regel hieronder te moeten aanpassen.
+  const strategy = getEffectiveStrategy(sym);
   const { trades, equityCurve, finalValue, startCapital } = result;
   const pnl = finalValue - startCapital;
   const pct = (pnl/startCapital)*100;
