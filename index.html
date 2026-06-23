@@ -51,6 +51,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .trade-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
 .trade-row:last-child{border-bottom:none}
 .setting-row{margin-bottom:16px}
+.feature-toggle{width:44px;height:24px;border-radius:12px;background:var(--border);position:relative;cursor:pointer;flex-shrink:0}
+.feature-toggle-dot{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--sub);transition:all 0.2s}
 .setting-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
 .setting-label span:last-child{font-weight:700}
 input[type=range]{width:100%;accent-color:var(--blue)}
@@ -153,6 +155,7 @@ input[type=range]{width:100%;accent-color:var(--blue)}
   </div>
   <div class="summary-tf" id="tf-summary"></div>
   <div class="signal-box" id="signal-box"></div>
+  <div class="card" id="signal-strength-box" style="margin:0 12px 10px;padding:12px"></div>
   <div class="card" id="pattern-card">
     <div class="card-title">📊 Herkende patronen</div>
     <div id="detected-patterns"></div>
@@ -345,9 +348,112 @@ input[type=range]{width:100%;accent-color:var(--blue)}
       <div class="setting-label"><span>Max. open posities</span><span id="lbl-maxpos">3</span></div>
       <input type="range" min="1" max="10" value="3" oninput="document.getElementById('lbl-maxpos').textContent=this.value;strategy.maxOpenPositions=+this.value"/>
     </div>
-    <div class="setting-row" style="margin-bottom:0">
+    <div class="setting-row">
       <div class="setting-label"><span>Max. crypto-blootstelling</span><span id="lbl-maxexp">60%</span></div>
       <input type="range" min="10" max="100" step="5" value="60" oninput="document.getElementById('lbl-maxexp').textContent=this.value+'%';strategy.maxPortfolioExposurePct=+this.value"/>
+    </div>
+  </div>
+
+  <!-- Multi-timeframe bevestiging -->
+  <div class="card">
+    <div class="card-title">📊 Multi-timeframe bevestiging</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Eist dat een hoger timeframe het signaal niet tegenspreekt — voorkomt een koop op 5min tegen een bearish daggrafiek in.</div>
+      <div onclick="toggleSetting('mtfConfirmationEnabled','mtf-toggle')" id="mtf-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="mtf-toggle-dot"></div>
+      </div>
+    </div>
+    <div id="mtf-settings" style="display:none">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Bevestigingstimeframe</label>
+      <div style="display:flex;gap:8px">
+        <button class="tf-tab" id="mtf-tf-15m" onclick="setMtfTimeframe('15m')">15min</button>
+        <button class="tf-tab active" id="mtf-tf-1h" onclick="setMtfTimeframe('1h')">1 uur</button>
+        <button class="tf-tab" id="mtf-tf-4h" onclick="setMtfTimeframe('4h')">4 uur</button>
+        <button class="tf-tab" id="mtf-tf-1d" onclick="setMtfTimeframe('1d')">1 dag</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Volume-filter -->
+  <div class="card">
+    <div class="card-title">📈 Volume-filter</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Dempt signalen op laag volume — een RSI-oversold op weinig handel is minder betrouwbaar.</div>
+      <div onclick="toggleSetting('volumeFilterEnabled','vol-toggle')" id="vol-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="vol-toggle-dot"></div>
+      </div>
+    </div>
+    <div id="vol-settings" style="display:none">
+      <div class="setting-row" style="margin-bottom:0">
+        <div class="setting-label"><span>Min. volume-ratio</span><span id="lbl-volratio">1.2x</span></div>
+        <input type="range" min="0.5" max="3" step="0.1" value="1.2" oninput="document.getElementById('lbl-volratio').textContent=this.value+'x';strategy.volumeMinRatio=+this.value"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Market regime detectie -->
+  <div class="card">
+    <div class="card-title">🌊 Market regime detectie</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Herkent trend vs. zijwaartse markt en geeft een lichte boost aan de indicator die daar het beste bij past.</div>
+      <div onclick="toggleSetting('regimeDetectionEnabled','regime-toggle')" id="regime-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="regime-toggle-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Correlatie-bewust risico -->
+  <div class="card">
+    <div class="card-title">🔗 Correlatie-limiet</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Voorkomt te veel posities binnen dezelfde groep (bv. BTC+ETH bewegen vaak samen — telt niet als échte spreiding).</div>
+      <div onclick="toggleSetting('correlationLimitEnabled','corr-toggle')" id="corr-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="corr-toggle-dot"></div>
+      </div>
+    </div>
+    <div id="corr-settings" style="display:none">
+      <div class="setting-row" style="margin-bottom:0">
+        <div class="setting-label"><span>Max. per groep</span><span id="lbl-corrmax">2</span></div>
+        <input type="range" min="1" max="5" value="2" oninput="document.getElementById('lbl-corrmax').textContent=this.value;strategy.maxPositionsPerGroup=+this.value"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dynamische position sizing -->
+  <div class="card">
+    <div class="card-title">⚖️ Signaalsterkte-sizing</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Sterkere signalen (bevestigd door volume + hoger timeframe) krijgen een grotere positie, zwakke een kleinere.</div>
+      <div onclick="toggleSetting('dynamicSizingEnabled','sizing-toggle')" id="sizing-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="sizing-toggle-dot"></div>
+      </div>
+    </div>
+    <div id="sizing-settings" style="display:none">
+      <div class="setting-row">
+        <div class="setting-label"><span>Min. multiplier (zwak signaal)</span><span id="lbl-minmult">0.5x</span></div>
+        <input type="range" min="0.1" max="1" step="0.1" value="0.5" oninput="document.getElementById('lbl-minmult').textContent=this.value+'x';strategy.minPositionSizeMult=+this.value"/>
+      </div>
+      <div class="setting-row" style="margin-bottom:0">
+        <div class="setting-label"><span>Max. multiplier (sterk signaal)</span><span id="lbl-maxmult">1.5x</span></div>
+        <input type="range" min="1" max="3" step="0.1" value="1.5" oninput="document.getElementById('lbl-maxmult').textContent=this.value+'x';strategy.maxPositionSizeMult=+this.value"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tijd-gebaseerde exit -->
+  <div class="card">
+    <div class="card-title">⏱️ Max. houdtijd</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Sluit een positie automatisch na X uur als stop-loss/take-profit nog niet geraakt zijn — voorkomt vastzittend kapitaal.</div>
+      <div onclick="toggleSetting('maxHoldHoursEnabled','hold-toggle')" id="hold-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="hold-toggle-dot"></div>
+      </div>
+    </div>
+    <div id="hold-settings" style="display:none">
+      <div class="setting-row" style="margin-bottom:0">
+        <div class="setting-label"><span>Max. uren open</span><span id="lbl-holdhours">48</span></div>
+        <input type="range" min="1" max="168" value="48" oninput="document.getElementById('lbl-holdhours').textContent=this.value;strategy.maxHoldHours=+this.value"/>
+      </div>
     </div>
   </div>
 
@@ -410,6 +516,7 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="18" rx="1"/><rect x="9" y="8" width="6" height="13" rx="1"/><rect x="16" y="5" width="6" height="16" rx="1"/></svg>Patronen
   </button>
 </nav>
+</div><!-- /app -->
 
 <!-- ════════════════════════════════════════════════ -->
 <!-- BACKTEST MODAL -->
@@ -450,7 +557,12 @@ input[type=range]{width:100%;accent-color:var(--blue)}
       Stop-Loss: <span id="bt-summary-sl" style="color:var(--red)"></span> ·
       Take-Profit: <span id="bt-summary-tp" style="color:var(--green)"></span><br>
       Trailing stop: <span id="bt-summary-trail" style="color:var(--text)"></span><br>
-      Fee: <span id="bt-summary-fee" style="color:var(--text)"></span> · Slippage: <span id="bt-summary-slip" style="color:var(--text)"></span>
+      Fee: <span id="bt-summary-fee" style="color:var(--text)"></span> · Slippage: <span id="bt-summary-slip" style="color:var(--text)"></span><br>
+      MTF-bevestiging: <span id="bt-summary-mtf" style="color:var(--text)"></span> ·
+      Volume-filter: <span id="bt-summary-vol" style="color:var(--text)"></span><br>
+      Regime-detectie: <span id="bt-summary-regime" style="color:var(--text)"></span> ·
+      Dynamische sizing: <span id="bt-summary-sizing" style="color:var(--text)"></span><br>
+      Max. houdtijd: <span id="bt-summary-hold" style="color:var(--text)"></span>
     </div>
 
     <button onclick="runBacktest()" id="bt-run-btn" style="width:100%;padding:14px;background:var(--purple);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer">▶ Backtest uitvoeren</button>
@@ -573,6 +685,35 @@ const MARKETS={
 const TYPE_LABEL={commodity:'GOUD',crypto:'CRYPTO',stock:'AANDEEL',forex:'FOREX'};
 
 // ══════════════════════════════════════════════════════
+// MULTI-TIMEFRAME, VOLUME, CORRELATIE, REGIME — state
+// ══════════════════════════════════════════════════════
+// Naast de live 5min candles (candles[sym]) houden we per coin ook
+// hogere timeframes bij (1uur, 1dag), opgehaald via getCandles. Dat
+// is nodig voor multi-timeframe-bevestiging: een 5min koopsignaal
+// telt alleen mee als het hogere timeframe niet tegenspreekt.
+let htfCandles = {};        // { 'BTC/EUR': { '1h':[...], '1d':[...] } }
+let htfLastFetch = {};      // { 'BTC/EUR': timestamp } — voorkomt te vaak ophalen
+const HTF_REFRESH_MS = 5 * 60 * 1000; // hogere timeframes elke 5 min verversen
+
+// Vooraf gedefinieerde correlatiegroepen — coins in dezelfde groep
+// bewegen doorgaans sterk samen. Dit is een vereenvoudigde, statische
+// inschatting (geen live correlatieberekening) maar dekt de bekende
+// grote clusters goed genoeg om overconcentratie te voorkomen.
+const CORRELATION_GROUPS = {
+  majors:    ['BTC/EUR','ETH/EUR'],
+  altL1:     ['SOL/EUR','ADA/EUR','SUI/EUR','DOT/EUR','AVAX/EUR'],
+  defi_infra:['LINK/EUR','EIGEN/EUR','SYN/EUR','ARX/EUR','FET/EUR'],
+  meme_misc: ['DOGE/EUR','XRP/EUR','XLM/EUR','RE/EUR','WLD/EUR'],
+  ai_perf:   ['TAO/EUR','HYPE/EUR','FET/EUR'],
+};
+function getCorrelationGroup(sym){
+  for(const [group, syms] of Object.entries(CORRELATION_GROUPS)){
+    if(syms.includes(sym)) return group;
+  }
+  return 'overig_'+sym; // onbekende coin = eigen groep, geen overlap
+}
+
+// ══════════════════════════════════════════════════════
 // BUILT-IN PATTERN DEFINITIONS
 // ══════════════════════════════════════════════════════
 const PATTERN_DEFS={
@@ -681,6 +822,24 @@ let strategy={
   // ── Portfolio-niveau risicobeheer ───────────────────────────────
   maxOpenPositions:3,       // max. aantal gelijktijdige open posities
   maxPortfolioExposurePct:60, // max. % van portfolio in crypto tegelijk
+  // ── Multi-timeframe bevestiging ─────────────────────────────────
+  mtfConfirmationEnabled:true,  // eis dat een hoger timeframe niet tegenspreekt
+  mtfTimeframe:'1h',             // welk hoger timeframe gebruiken als filter
+  // ── Volume-filter ────────────────────────────────────────────────
+  volumeFilterEnabled:true,
+  volumeMinRatio:1.2,            // huidige candle-volume moet ≥ dit × gem. volume zijn
+  // ── Market regime detectie ──────────────────────────────────────
+  regimeDetectionEnabled:true,   // pas strategie aan op trend vs. range
+  // ── Correlatie-bewust risicobeheer ───────────────────────────────
+  correlationLimitEnabled:true,
+  maxPositionsPerGroup:2,        // max. open posities binnen 1 correlatiegroep
+  // ── Signaalsterkte-gebaseerde position sizing ────────────────────
+  dynamicSizingEnabled:true,
+  minPositionSizeMult:0.5,       // bij zwak signaal: 50% van normale grootte
+  maxPositionSizeMult:1.5,       // bij sterk signaal: 150% van normale grootte
+  // ── Tijd-gebaseerde exit ─────────────────────────────────────────
+  maxHoldHoursEnabled:false,
+  maxHoldHours:48,
 };
 
 // Houdt per coin de hoogst bereikte prijs bij sinds aankoop — nodig
@@ -744,6 +903,66 @@ let realEurBalance = null;          // EUR saldo, null = nog niet geladen
 let realCryptoBalances = {};        // { 'BTC/EUR': 0.0012, ... } — wat je echt bezit
 let lastBalanceSync = 0;
 
+// ── Hogere timeframe candles ophalen (voor MTF + regime detectie) ──
+// Haalt 1h/1d candles op via Bitvavo's getCandles. Zonder live
+// verbinding wordt een redelijke simulatie gemaakt op basis van de
+// bestaande live candles, zodat de features ook in paper-modus
+// zonder koppeling een (minder nauwkeurige) werking hebben.
+async function fetchHtfCandles(sym, interval){
+  const now = Date.now();
+  if(!htfCandles[sym]) htfCandles[sym] = {};
+  const lastFetch = htfLastFetch[sym+'_'+interval] || 0;
+  if(now - lastFetch < HTF_REFRESH_MS && htfCandles[sym][interval]?.length) {
+    return htfCandles[sym][interval]; // recent genoeg, niet opnieuw ophalen
+  }
+
+  if(window._bvConnected && window._bvClient && window.BITVAVO_SYMBOL_MAP?.[sym]){
+    try{
+      const data = await window._bvClient.getCandles(sym, interval, 60);
+      if(data && data.length >= 10){
+        htfCandles[sym][interval] = data;
+        htfLastFetch[sym+'_'+interval] = now;
+        return data;
+      }
+    } catch(err){
+      console.warn(`[TradeBot] HTF candles ophalen mislukt voor ${sym} (${interval}):`, err.message);
+    }
+  }
+
+  // Fallback: simuleer hogere timeframe door de live 5min-candles te
+  // aggregeren (ruwe benadering, beter dan niets als er geen live
+  // verbinding is)
+  const liveCandles = candles[sym] || [];
+  if(liveCandles.length >= 10){
+    const groupSize = interval==='1d' ? 288 : interval==='1h' ? 12 : 4; // 5min candles per groep
+    const aggregated = [];
+    for(let i=0; i<liveCandles.length; i+=groupSize){
+      const group = liveCandles.slice(i, i+groupSize);
+      if(!group.length) continue;
+      aggregated.push({
+        t: group[0].t || Date.now(),
+        o: group[0].o, c: group[group.length-1].c,
+        h: Math.max(...group.map(c=>c.h)),
+        l: Math.min(...group.map(c=>c.l)),
+        v: group.reduce((a,c)=>a+(c.v||0),0),
+      });
+    }
+    htfCandles[sym][interval] = aggregated;
+    htfLastFetch[sym+'_'+interval] = now;
+    return aggregated;
+  }
+  return [];
+}
+
+// Haalt alvast HTF candles op voor alle actieve bot-markten (wordt
+// periodiek aangeroepen, niet bij elke tick — anders te veel calls)
+async function refreshAllHtfCandles(){
+  for(const sym of strategy.markets){
+    await fetchHtfCandles(sym, strategy.mtfTimeframe);
+    if(strategy.regimeDetectionEnabled) await fetchHtfCandles(sym, '1d');
+  }
+}
+
 async function syncRealBalances(){
   if(!window._bvConnected || !window._bvClient) return;
   try{
@@ -782,6 +1001,9 @@ function tick(){
   if(document.getElementById('page-analyse').classList.contains('active'))renderAnalyse();
   if(document.getElementById('page-bot').classList.contains('active'))renderBot();
   runBot();
+  // HTF candles verversen — de functie zelf throttlet via HTF_REFRESH_MS,
+  // dus dit kan elke tick aangeroepen worden zonder overmatige calls
+  refreshAllHtfCandles().catch(()=>{});
   const ti=document.getElementById('tick-indicator');
   if(ti){ti.style.color='#00d68f';setTimeout(()=>ti.style.color='var(--sub)',400);}
 }
@@ -801,6 +1023,59 @@ function rsiCalc(arr,n=14){
 function getInd(sym){
   const h=history[sym]||[];
   return{rsi:rsiCalc(h),sma20:sma(h,20),sma50:sma(h,50)};
+}
+
+// ══════════════════════════════════════════════════════
+// VOLUME-ANALYSE
+// ══════════════════════════════════════════════════════
+// Vergelijkt het volume van de huidige (laatste) candle met het
+// gemiddelde volume van de voorgaande candles. Een signaal op
+// bovengemiddeld volume is betrouwbaarder dan op laag volume.
+function getVolumeRatio(candleArr, lookback=20){
+  if(!candleArr || candleArr.length < lookback+1) return null;
+  const recent = candleArr.slice(-lookback-1);
+  const current = recent[recent.length-1];
+  const previous = recent.slice(0,-1);
+  const avgVol = previous.reduce((a,c)=>a+(c.v||0),0)/previous.length;
+  if(avgVol === 0) return null;
+  return (current.v||0)/avgVol;
+}
+
+// ══════════════════════════════════════════════════════
+// MARKET REGIME DETECTIE (trend vs. range)
+// ══════════════════════════════════════════════════════
+// Gebruikt een vereenvoudigde ATR-achtige volatiliteitsmaat plus de
+// richting van prijsbeweging om te bepalen of de markt momenteel
+// trendt (sterke, aanhoudende richting) of ranget (zijwaarts, geen
+// duidelijke richting). RSI/MA-achtige indicatoren werken beter in
+// ranges; trend-volgende signalen (zoals MA-crossover) werken beter
+// in trends.
+function detectMarketRegime(candleArr){
+  if(!candleArr || candleArr.length < 20) return 'unknown';
+
+  const recent = candleArr.slice(-20);
+  // Gemiddelde true range als volatiliteitsmaat
+  let trSum = 0;
+  for(let i=1;i<recent.length;i++){
+    const c=recent[i], p=recent[i-1];
+    const tr = Math.max(c.h-c.l, Math.abs(c.h-p.c), Math.abs(c.l-p.c));
+    trSum += tr;
+  }
+  const atr = trSum/(recent.length-1);
+  const avgPrice = recent.reduce((a,c)=>a+c.c,0)/recent.length;
+  const atrPct = avgPrice>0 ? (atr/avgPrice)*100 : 0;
+
+  // Richting: hoeveel van de totale prijsbeweging is "netto" verplaatsing
+  // t.o.v. de som van alle absolute candle-bewegingen (efficiency ratio)
+  const netMove = Math.abs(recent[recent.length-1].c - recent[0].c);
+  const totalMove = recent.slice(1).reduce((a,c,i)=>a+Math.abs(c.c-recent[i].c),0);
+  const efficiency = totalMove>0 ? netMove/totalMove : 0;
+
+  // Hoge efficiency (>0.4) + redelijke volatiliteit = trend
+  // Lage efficiency = veel heen-en-weer bewegen zonder netto richting = range
+  if(efficiency > 0.4) return 'trend';
+  if(efficiency < 0.2) return 'range';
+  return 'mixed';
 }
 
 // ══════════════════════════════════════════════════════
@@ -849,7 +1124,8 @@ function detectCustom(sym){
 // ══════════════════════════════════════════════════════
 function getSignal(sym){
   const ind=getInd(sym);
-  const builtIn=detectBuiltIn(candles[sym]||[]);
+  const liveCandles = candles[sym]||[];
+  const builtIn=detectBuiltIn(liveCandles);
   const custom=detectCustom(sym);
   const activePats=builtIn.filter(p=>strategy.activePatterns.includes(p));
   const pb=patternBias(activePats);
@@ -877,11 +1153,83 @@ function getSignal(sym){
     else if(cp.bias==='bear'){bear+=w;reasons.push(`🎯 ${cp.name}`);}
   });
 
+  // ── Volume-filter ───────────────────────────────────────────────
+  // Een laag-volume signaal is minder betrouwbaar — we dempen de
+  // score in plaats van het signaal volledig te negeren, zodat het
+  // nog wel meetelt maar minder zwaar.
+  let volumeRatio = null, volumeConfirmed = true;
+  if(strategy.volumeFilterEnabled){
+    volumeRatio = getVolumeRatio(liveCandles);
+    if(volumeRatio !== null){
+      volumeConfirmed = volumeRatio >= strategy.volumeMinRatio;
+      if(!volumeConfirmed){
+        bull = bull*0.5; bear = bear*0.5; // signaal halveren, niet wegvegen
+        reasons.push(`Vol ${volumeRatio.toFixed(1)}x (laag)`);
+      } else {
+        reasons.push(`Vol ${volumeRatio.toFixed(1)}x ✓`);
+      }
+    }
+  }
+
+  // ── Multi-timeframe bevestiging ──────────────────────────────────
+  // Een hoger timeframe dat de TEGENGESTELDE richting wijst, drukt
+  // het signaal richting neutraal — voorkomt 5min-koopjes tegen een
+  // bearish daggrafiek in.
+  let mtfAgree = true, mtfDirection = null;
+  if(strategy.mtfConfirmationEnabled){
+    const htf = htfCandles[sym]?.[strategy.mtfTimeframe];
+    if(htf && htf.length >= 26){
+      const htfCloses = htf.map(c=>c.c);
+      const htfRsi = rsiCalc(htfCloses);
+      const htfS20 = sma(htfCloses,20), htfS50 = sma(htfCloses,50);
+      let htfBull=0, htfBear=0;
+      if(htfRsi!=null){ if(htfRsi<45) htfBull++; else if(htfRsi>55) htfBear++; }
+      if(htfS20&&htfS50){ if(htfS20>htfS50) htfBull++; else htfBear++; }
+      mtfDirection = htfBull>htfBear ? 'bull' : htfBear>htfBull ? 'bear' : 'neutral';
+
+      const liveDirection = bull>bear ? 'bull' : bear>bull ? 'bear' : 'neutral';
+      if(liveDirection!=='neutral' && mtfDirection!=='neutral' && liveDirection!==mtfDirection){
+        mtfAgree = false;
+        bull = bull*0.3; bear = bear*0.3; // sterk dempen bij tegenspraak
+        reasons.push(`${strategy.mtfTimeframe} spreekt tegen`);
+      } else if(liveDirection!=='neutral' && liveDirection===mtfDirection){
+        reasons.push(`${strategy.mtfTimeframe} bevestigt`);
+      }
+    }
+  }
+
+  // ── Market regime detectie ───────────────────────────────────────
+  // In een 'range' werken RSI/patroon-signalen beter; in een 'trend'
+  // werkt MA-crossover beter. We geven een lichte boost aan de
+  // indicator die bij het huidige regime past.
+  let regime = 'unknown';
+  if(strategy.regimeDetectionEnabled){
+    regime = detectMarketRegime(liveCandles);
+    if(regime==='range' && ind.rsi!=null && (ind.rsi<strategy.rsiOversold||ind.rsi>strategy.rsiOverbought)){
+      if(ind.rsi<strategy.rsiOversold) bull+=1; else bear+=1;
+      reasons.push('Range-markt (RSI-boost)');
+    } else if(regime==='trend' && ind.sma20 && ind.sma50){
+      if(ind.sma20>ind.sma50) bull+=1; else bear+=1;
+      reasons.push('Trend-markt (MA-boost)');
+    }
+  }
+
   let signal,color,icon;
   if(bull>bear+1){signal='KOPEN';color='var(--green)';icon='🟢';}
   else if(bear>bull+1){signal='VERKOPEN';color='var(--red)';icon='🔴';}
   else{signal='NEUTRAAL';color='var(--amber)';icon='🟡';}
-  return{signal,color,icon,reasons,ind,patterns:builtIn,custom};
+
+  // ── Signaalsterkte (0-1) — voor dynamische position sizing ──────
+  // Combineert hoeveel de bull/bear-score uiteenloopt met of volume
+  // en MTF het signaal bevestigen, tot één 0-1 sterktewaarde.
+  const scoreDiff = Math.abs(bull-bear);
+  const maxPossibleScore = 8; // ruwe normalisatie-aanname
+  let strength = Math.min(1, scoreDiff/maxPossibleScore);
+  if(strategy.volumeFilterEnabled && volumeRatio!==null && !volumeConfirmed) strength *= 0.6;
+  if(strategy.mtfConfirmationEnabled && !mtfAgree) strength *= 0.5;
+
+  return{signal,color,icon,reasons,ind,patterns:builtIn,custom,
+    volumeRatio,volumeConfirmed,mtfAgree,mtfDirection,regime,strength};
 }
 
 // ══════════════════════════════════════════════════════
@@ -975,9 +1323,32 @@ function renderAnalyse(){
   const sig=getSignal(sym);
   const sb=document.getElementById('signal-box');
   sb.innerHTML=`<div style="font-size:28px">${sig.icon}</div>
-    <div><div style="font-size:18px;font-weight:800;color:${sig.color}">${sig.signal}</div>
+    <div style="flex:1"><div style="font-size:18px;font-weight:800;color:${sig.color}">${sig.signal}</div>
     <div style="font-size:12px;color:var(--sub)">${sig.reasons.slice(0,3).join(' · ')}</div></div>`;
   sb.style.background=sig.color+'15';sb.style.border='1px solid '+sig.color+'44';
+
+  // Signaalsterkte-balk + MTF/volume/regime status
+  const strengthEl = document.getElementById('signal-strength-box');
+  if(strengthEl){
+    const strengthPct = Math.round((sig.strength||0)*100);
+    const strengthColor = strengthPct>=60?'var(--green)':strengthPct>=30?'var(--amber)':'var(--red)';
+    const mtfBadge = strategy.mtfConfirmationEnabled
+      ? `<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:${sig.mtfAgree?'var(--green)22':'var(--red)22'};color:${sig.mtfAgree?'var(--green)':'var(--red)'}">${strategy.mtfTimeframe} ${sig.mtfAgree?'✓ bevestigt':'✗ spreekt tegen'}</span>` : '';
+    const volBadge = strategy.volumeFilterEnabled && sig.volumeRatio!=null
+      ? `<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:${sig.volumeConfirmed?'var(--green)22':'var(--amber)22'};color:${sig.volumeConfirmed?'var(--green)':'var(--amber)'}">Vol ${sig.volumeRatio.toFixed(1)}x</span>` : '';
+    const regimeBadge = strategy.regimeDetectionEnabled && sig.regime!=='unknown'
+      ? `<span style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--blue)22;color:var(--blue)">${sig.regime==='trend'?'📈 Trend':sig.regime==='range'?'↔️ Range':'🌀 Gemengd'}</span>` : '';
+    strengthEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;color:var(--sub)">Signaalsterkte</span>
+        <span style="font-size:12px;font-weight:700;color:${strengthColor}">${strengthPct}%</span>
+      </div>
+      <div style="background:var(--border);border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px">
+        <div style="background:${strengthColor};height:100%;width:${strengthPct}%;transition:width 0.3s"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${mtfBadge}${volBadge}${regimeBadge}</div>
+    `;
+  }
 
   // Detected patterns
   const patEl=document.getElementById('detected-patterns');
@@ -1106,6 +1477,17 @@ function runBot(){
       }
       if(pct<=-strategy.stopLoss){executeSell(sym,price,pos,'Stop-Loss');return;}
       else if(pct>=strategy.takeProfit){executeSell(sym,price,pos,'Take-Profit');return;}
+
+      // ── Tijd-gebaseerde exit ──────────────────────────────────────
+      // Als een positie te lang vastzit zonder stop-loss/take-profit
+      // te raken, komt het kapitaal vrij voor betere kansen elders.
+      if(strategy.maxHoldHoursEnabled && pos.openedAt){
+        const hoursOpen = (now - pos.openedAt) / (1000*60*60);
+        if(hoursOpen >= strategy.maxHoldHours){
+          executeSell(sym,price,pos,'Max. houdtijd bereikt');
+          return;
+        }
+      }
       return;
     }
 
@@ -1120,6 +1502,16 @@ function runBot(){
     const openCount = Object.keys(openPositions).length;
     if(openCount >= strategy.maxOpenPositions) return;
 
+    // ── Correlatie-bewust risicobeheer ──────────────────────────────
+    // Voorkomt te veel posities binnen dezelfde correlatiegroep (bv.
+    // BTC+ETH+SOL tellen als "3 verschillende" posities maar zijn in
+    // werkelijkheid grotendeels hetzelfde risico).
+    if(strategy.correlationLimitEnabled){
+      const group = getCorrelationGroup(sym);
+      const sameGroupCount = Object.keys(openPositions).filter(s=>getCorrelationGroup(s)===group).length;
+      if(sameGroupCount >= strategy.maxPositionsPerGroup) return;
+    }
+
     const tv = totalValue();
     const currentExposure = Object.entries(openPositions).reduce((a,[s,p])=>a+(p.qty*(prices[s]||p.entryPrice)),0);
     const exposurePct = tv>0 ? (currentExposure/tv)*100 : 0;
@@ -1133,6 +1525,17 @@ function runBot(){
     else if(sig.signal==='KOPEN'){shouldBuy=true;reason=sig.reasons[0]||'Signaal';}
     if(shouldBuy){
       let spend=cash*(strategy.positionSize/100);if(spend<1)return;
+
+      // ── Signaalsterkte-gebaseerde position sizing ───────────────
+      // Een sterker signaal (hoge bull/bear-score, bevestigd door
+      // volume en hogere timeframe) krijgt een grotere positie; een
+      // marginaal signaal een kleinere.
+      if(strategy.dynamicSizingEnabled){
+        const mult = strategy.minPositionSizeMult + sig.strength*(strategy.maxPositionSizeMult-strategy.minPositionSizeMult);
+        spend = spend * mult;
+        reason += ` (${mult.toFixed(1)}x grootte, sterkte ${(sig.strength*100).toFixed(0)}%)`;
+      }
+
       // Nooit meer uitgeven dan de resterende exposure-ruimte toelaat
       const maxAllowedSpend = tv*(strategy.maxPortfolioExposurePct/100) - currentExposure;
       if(maxAllowedSpend < 1) return;
@@ -1202,7 +1605,7 @@ async function executeBotBuy(sym, price, spend, reason){
       const realQty   = parseFloat(result.filledAmount || spend/price);
       const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
       cash -= spend;
-      openPositions[sym] = {qty:realQty, entryPrice:realPrice};
+      openPositions[sym] = {qty:realQty, entryPrice:realPrice, openedAt:Date.now()};
       addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason});
       addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins) — ${reason}`);
       sendNotification('💶 Bot kocht '+sym, `€${fmt(realPrice)} per coin — ${reason}`, 'tradebot-buy');
@@ -1219,7 +1622,7 @@ async function executeBotBuy(sym, price, spend, reason){
   // Paper modus — gesimuleerd, met fee & slippage voor realistische P&L
   const { effectivePrice, feeAmount, qty } = applyBuySlippageAndFee(price, spend);
   cash-=spend;
-  openPositions[sym]={qty, entryPrice:effectivePrice, feePaid:feeAmount};
+  openPositions[sym]={qty, entryPrice:effectivePrice, feePaid:feeAmount, openedAt:Date.now()};
   trailingHighWaterMark[sym] = effectivePrice; // start trailing-tracking
   localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
   addTrade({sym,side:'BUY',qty,price:effectivePrice,reason,fee:feeAmount});
@@ -1311,7 +1714,7 @@ async function manualBuy(){
       const realQty   = parseFloat(result.filledAmount || spend/price);
       const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
       cash -= spend;
-      openPositions[sym] = {qty:realQty, entryPrice:realPrice};
+      openPositions[sym] = {qty:realQty, entryPrice:realPrice, openedAt:Date.now()};
       trailingHighWaterMark[sym] = realPrice;
       localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
       addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason:'Handmatig (Bitvavo)'});
@@ -1331,7 +1734,7 @@ async function manualBuy(){
   // Paper modus — met fee & slippage voor realistische P&L
   const { effectivePrice, feeAmount, qty } = applyBuySlippageAndFee(price, spend);
   cash-=spend;
-  openPositions[sym]={qty, entryPrice:effectivePrice, feePaid:feeAmount};
+  openPositions[sym]={qty, entryPrice:effectivePrice, feePaid:feeAmount, openedAt:Date.now()};
   trailingHighWaterMark[sym] = effectivePrice;
   localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
   addTrade({sym,side:'BUY',qty,price:effectivePrice,reason:'Handmatig',fee:feeAmount});
@@ -1732,6 +2135,47 @@ function updateNotificationToggleUI(){
   }
 }
 
+// ── Generieke toggle voor de nieuwe strategie-features ──────────────
+// Eén functie die elke boolean strategy-instelling kan aan/uitzetten
+// en het bijbehorende toggle-element + settings-blok bijwerkt, zodat
+// we niet voor elke feature losse aan/uit-code moeten herhalen.
+const FEATURE_SETTINGS_MAP = {
+  'mtf-toggle':'mtf-settings', 'vol-toggle':'vol-settings',
+  'corr-toggle':'corr-settings', 'sizing-toggle':'sizing-settings',
+  'hold-toggle':'hold-settings', 'regime-toggle':null,
+};
+function toggleSetting(strategyKey, toggleId){
+  strategy[strategyKey] = !strategy[strategyKey];
+  updateFeatureToggleUI(toggleId, strategyKey);
+  toast(strategy[strategyKey] ? '✓ Aangezet' : 'Uitgezet', strategy[strategyKey] ? 'var(--green)' : undefined);
+}
+function updateFeatureToggleUI(toggleId, strategyKey){
+  const toggle = document.getElementById(toggleId);
+  const dot = document.getElementById(toggleId+'-dot');
+  if(!toggle||!dot) return;
+  const enabled = strategy[strategyKey];
+  dot.style.left = enabled?'22px':'2px';
+  dot.style.background = enabled?'#000':'var(--sub)';
+  toggle.style.background = enabled?'var(--green)':'var(--border)';
+  const settingsId = FEATURE_SETTINGS_MAP[toggleId];
+  if(settingsId){
+    const settingsEl = document.getElementById(settingsId);
+    if(settingsEl) settingsEl.style.display = enabled?'block':'none';
+  }
+}
+function initAllFeatureToggles(){
+  updateFeatureToggleUI('mtf-toggle','mtfConfirmationEnabled');
+  updateFeatureToggleUI('vol-toggle','volumeFilterEnabled');
+  updateFeatureToggleUI('regime-toggle','regimeDetectionEnabled');
+  updateFeatureToggleUI('corr-toggle','correlationLimitEnabled');
+  updateFeatureToggleUI('sizing-toggle','dynamicSizingEnabled');
+  updateFeatureToggleUI('hold-toggle','maxHoldHoursEnabled');
+}
+function setMtfTimeframe(tf){
+  strategy.mtfTimeframe = tf;
+  ['15m','1h','4h','1d'].forEach(t=>document.getElementById('mtf-tf-'+t)?.classList.toggle('active',t===tf));
+}
+
 function updateTrailingToggleUI(){
   const dot = document.getElementById('trailing-toggle-dot');
   const toggle = document.getElementById('trailing-toggle');
@@ -1773,6 +2217,11 @@ function openBacktest(){
   document.getElementById('bt-summary-trail').textContent = strategy.trailingStopEnabled ? `aan (${strategy.trailingStopPct}%)` : 'uit';
   document.getElementById('bt-summary-fee').textContent = strategy.takerFeePct+'%';
   document.getElementById('bt-summary-slip').textContent = strategy.slippagePct+'%';
+  document.getElementById('bt-summary-mtf').textContent = strategy.mtfConfirmationEnabled ? `aan (${strategy.mtfTimeframe})` : 'uit';
+  document.getElementById('bt-summary-vol').textContent = strategy.volumeFilterEnabled ? `aan (min ${strategy.volumeMinRatio}x)` : 'uit';
+  document.getElementById('bt-summary-regime').textContent = strategy.regimeDetectionEnabled ? 'aan' : 'uit';
+  document.getElementById('bt-summary-sizing').textContent = strategy.dynamicSizingEnabled ? `aan (${strategy.minPositionSizeMult}x-${strategy.maxPositionSizeMult}x)` : 'uit';
+  document.getElementById('bt-summary-hold').textContent = strategy.maxHoldHoursEnabled ? `${strategy.maxHoldHours}u` : 'uit';
 
   document.getElementById('backtest-setup').style.display = 'block';
   document.getElementById('backtest-results').style.display = 'none';
@@ -1795,7 +2244,7 @@ function setBacktestInterval(iv){
 // werkt op een vaste candle-array in plaats van de live 'candles[sym]'
 // state, zodat we door de geschiedenis kunnen lopen zonder de live
 // app-state te raken.
-function btGetSignal(closesSoFar, candlesSoFar){
+function btGetSignal(closesSoFar, candlesSoFar, htfCandlesSoFar){
   const r = rsiCalc(closesSoFar);
   const s20 = sma(closesSoFar,20), s50 = sma(closesSoFar,50);
   const builtInPatterns = detectBuiltIn(candlesSoFar).filter(p=>strategy.activePatterns.includes(p));
@@ -1813,15 +2262,60 @@ function btGetSignal(closesSoFar, candlesSoFar){
     bull+=pb.bull; bear+=pb.bear;
   }
 
-  if(bull>bear+1) return 'KOPEN';
-  if(bear>bull+1) return 'VERKOPEN';
-  return 'NEUTRAAL';
+  // Volume-filter — zelfde logica als de live bot
+  let volumeConfirmed = true;
+  if(strategy.volumeFilterEnabled){
+    const volRatio = getVolumeRatio(candlesSoFar);
+    if(volRatio !== null){
+      volumeConfirmed = volRatio >= strategy.volumeMinRatio;
+      if(!volumeConfirmed){ bull*=0.5; bear*=0.5; }
+    }
+  }
+
+  // Multi-timeframe bevestiging — gebruikt de meegegeven, apart
+  // opgehaalde hogere-timeframe candle-array t/m hetzelfde moment
+  let mtfAgree = true;
+  if(strategy.mtfConfirmationEnabled && htfCandlesSoFar && htfCandlesSoFar.length >= 26){
+    const htfCloses = htfCandlesSoFar.map(c=>c.c);
+    const htfRsi = rsiCalc(htfCloses);
+    const htfS20 = sma(htfCloses,20), htfS50 = sma(htfCloses,50);
+    let htfBull=0, htfBear=0;
+    if(htfRsi!=null){ if(htfRsi<45) htfBull++; else if(htfRsi>55) htfBear++; }
+    if(htfS20&&htfS50){ if(htfS20>htfS50) htfBull++; else htfBear++; }
+    const mtfDir = htfBull>htfBear?'bull':htfBear>htfBull?'bear':'neutral';
+    const liveDir = bull>bear?'bull':bear>bull?'bear':'neutral';
+    if(liveDir!=='neutral' && mtfDir!=='neutral' && liveDir!==mtfDir){
+      mtfAgree = false; bull*=0.3; bear*=0.3;
+    }
+  }
+
+  // Market regime — lichte boost net als in de live bot
+  if(strategy.regimeDetectionEnabled){
+    const regime = detectMarketRegime(candlesSoFar);
+    if(regime==='range' && r!=null && (r<strategy.rsiOversold||r>strategy.rsiOverbought)){
+      if(r<strategy.rsiOversold) bull+=1; else bear+=1;
+    } else if(regime==='trend' && s20 && s50){
+      if(s20>s50) bull+=1; else bear+=1;
+    }
+  }
+
+  let signal;
+  if(bull>bear+1) signal='KOPEN';
+  else if(bear>bull+1) signal='VERKOPEN';
+  else signal='NEUTRAAL';
+
+  const scoreDiff = Math.abs(bull-bear);
+  let strength = Math.min(1, scoreDiff/8);
+  if(!volumeConfirmed) strength*=0.6;
+  if(!mtfAgree) strength*=0.5;
+
+  return { signal, strength };
 }
 
 // ── De eigenlijke backtest-simulatie ─────────────────────────────────
-function simulateBacktest(candles, startCapital){
+function simulateBacktest(candles, startCapital, htfCandles){
   let cash = startCapital;
-  let position = null; // { qty, entryPrice, hwm }
+  let position = null; // { qty, entryPrice, hwm, openedAt }
   const trades = [];
   const equityCurve = []; // [{t, value}] voor de grafiek
   const closes = [];
@@ -1846,6 +2340,12 @@ function simulateBacktest(candles, startCapital){
       if(!exitReason && pct <= -strategy.stopLoss) exitReason = 'Stop-Loss';
       else if(!exitReason && pct >= strategy.takeProfit) exitReason = 'Take-Profit';
 
+      // Tijd-gebaseerde exit — zelfde logica als de live bot
+      if(!exitReason && strategy.maxHoldHoursEnabled && position.openedAt){
+        const hoursOpen = (c.t - position.openedAt) / (1000*60*60);
+        if(hoursOpen >= strategy.maxHoldHours) exitReason = 'Max. houdtijd bereikt';
+      }
+
       if(exitReason){
         const { effectivePrice, feeAmount, netProceeds } = applySellSlippageAndFee(price, position.qty);
         const costBasis = position.qty*position.entryPrice + position.feePaid;
@@ -1859,14 +2359,28 @@ function simulateBacktest(candles, startCapital){
         equityCurve.push({ t:c.t, value:cash });
         continue;
       }
-      const signal = btGetSignal(closes, candlesSoFar);
+
+      // HTF candle-array t/m hetzelfde tijdstip bepalen (geen look-ahead)
+      let htfSoFar = null;
+      if(htfCandles && htfCandles.length){
+        htfSoFar = htfCandles.filter(hc => hc.t <= c.t);
+      }
+
+      const { signal, strength } = btGetSignal(closes, candlesSoFar, htfSoFar);
       if(signal === 'KOPEN'){
-        const spend = cash * (strategy.positionSize/100);
+        let spend = cash * (strategy.positionSize/100);
+
+        // Signaalsterkte-gebaseerde sizing — zelfde logica als live
+        if(strategy.dynamicSizingEnabled){
+          const mult = strategy.minPositionSizeMult + strength*(strategy.maxPositionSizeMult-strategy.minPositionSizeMult);
+          spend = spend * mult;
+        }
+
         if(spend >= 5){
           const { effectivePrice, feeAmount, qty } = applyBuySlippageAndFee(price, spend);
           cash -= spend;
-          position = { qty, entryPrice:effectivePrice, hwm:effectivePrice, feePaid:feeAmount };
-          trades.push({ t:c.t, side:'BUY', price:effectivePrice, qty, pnl:null, reason:signal, fee:feeAmount });
+          position = { qty, entryPrice:effectivePrice, hwm:effectivePrice, feePaid:feeAmount, openedAt:c.t };
+          trades.push({ t:c.t, side:'BUY', price:effectivePrice, qty, pnl:null, reason:signal, fee:feeAmount, strength });
         }
       }
     }
@@ -1910,10 +2424,23 @@ async function runBacktest(){
       throw new Error('Niet genoeg historische data beschikbaar voor deze periode/interval');
     }
 
+    // Hogere timeframe candles ophalen voor multi-timeframe-bevestiging
+    // tijdens de backtest (dekt dezelfde periode, ruim genoeg voor MA50)
+    let htfForBacktest = null;
+    if(strategy.mtfConfirmationEnabled){
+      try{
+        const htfCandlesPerDay = { '15m':96,'1h':24,'4h':6,'1d':1 }[strategy.mtfTimeframe] || 24;
+        const htfLimit = Math.min(1440, Math.max(60, htfCandlesPerDay*btPeriodDays + 50));
+        htfForBacktest = await window._bvClient.getCandles(sym, strategy.mtfTimeframe, htfLimit);
+      } catch(err){
+        console.warn('[TradeBot] HTF candles voor backtest niet beschikbaar:', err.message);
+      }
+    }
+
     btn.innerHTML = '<span class="spinner"></span> Simulatie draaien...';
     await new Promise(r=>setTimeout(r, 50)); // UI even laten updaten
 
-    const result = simulateBacktest(candles, startCapital);
+    const result = simulateBacktest(candles, startCapital, htfForBacktest);
     renderBacktestResults(result, sym, candles);
   } catch(err){
     toast('❌ Backtest mislukt: ' + err.message, '#ff4757');
@@ -2015,6 +2542,48 @@ function analyzeBacktest(result, sym, candles){
   // (alleen relevant info, geen probleem, dus als 'tip' tonen indien van toepassing)
   if(pnl > 0 && sellTrades.length >= 5 && winRate >= 55 && maxDrawdown < 15){
     suggestions.push({ level:'good', text:`Solide combinatie van win rate (${fmt(winRate,0)}%) en beperkte drawdown (-${fmt(maxDrawdown,1)}%). Dit lijkt een stabiele basis — test deze instellingen ook op een langere periode (90 dagen) en een paar andere coins voordat je live gaat.` });
+  }
+
+  // 9. Tijd-gebaseerde exits — hoe vaak kwam dit voor?
+  const timeExitCount = exitCounts['Max. houdtijd bereikt']||0;
+  if(strategy.maxHoldHoursEnabled && timeExitCount > 0){
+    const timeExitRatio = timeExitCount/totalExits;
+    if(timeExitRatio > 0.4){
+      suggestions.push({ level:'warning', text:`${fmt(timeExitRatio*100,0)}% van je exits was een tijd-gebaseerde exit (max. houdtijd van ${strategy.maxHoldHours}u) — niet stop-loss/take-profit. Dat betekent dat je Stop-Loss/Take-Profit-niveaus mogelijk te ruim staan voor de tijd die je geeft, of dat de max. houdtijd te kort is voor deze coin/interval.` });
+    }
+  } else if(!strategy.maxHoldHoursEnabled && sellTrades.length >= 5){
+    // Check of er posities lijken vast te zitten (lange periode tussen buy en volgende sell zonder exit)
+    const buyTimes = trades.filter(t=>t.side==='BUY').map(t=>t.t);
+    const sellTimes = trades.filter(t=>t.side==='SELL').map(t=>t.t);
+    if(buyTimes.length && sellTimes.length){
+      const avgHoldHours = buyTimes.slice(0,sellTimes.length).reduce((a,bt,i)=>a+((sellTimes[i]-bt)/(1000*60*60)),0)/sellTimes.length;
+      if(avgHoldHours > 72){
+        suggestions.push({ level:'tip', text:`Posities staan gemiddeld ${fmt(avgHoldHours,0)} uur open voordat ze sluiten. Overweeg "Max. houdtijd" aan te zetten (bv. op ${Math.round(avgHoldHours*0.6)}u) om kapitaal sneller vrij te maken voor nieuwe kansen.` });
+      }
+    }
+  }
+
+  // 10. Signaalsterkte-verdeling — werkt dynamische sizing wel?
+  if(strategy.dynamicSizingEnabled){
+    const buyTradesWithStrength = trades.filter(t=>t.side==='BUY' && t.strength!=null);
+    if(buyTradesWithStrength.length >= 5){
+      const avgStrength = buyTradesWithStrength.reduce((a,t)=>a+t.strength,0)/buyTradesWithStrength.length;
+      if(avgStrength < 0.3){
+        suggestions.push({ level:'tip', text:`Gemiddelde signaalsterkte van je trades was laag (${fmt(avgStrength*100,0)}%) — de bot koopt vaak op marginale signalen, waardoor dynamische sizing meestal de kleine positie (${strategy.minPositionSizeMult}x) gebruikt. Overweeg strengere instapcriteria zodat alleen sterkere signalen tot een trade leiden.` });
+      }
+    }
+  } else if(sellTrades.length >= 8 && (wins.length && losses.length)){
+    // Suggestie om dynamic sizing te proberen als er een duidelijk
+    // onderscheid is tussen winnende en verliezende trades qua aantal
+    suggestions.push({ level:'tip', text:`Dynamische sizing staat uit — elke trade krijgt nu evenveel kapitaal. Zet deze aan om sterkere signalen (bevestigd door volume + hoger timeframe) automatisch een grotere positie te geven dan marginale signalen.` });
+  }
+
+  // 11. MTF/volume staan uit terwijl win rate matig is — suggereer aanzetten
+  if(!strategy.mtfConfirmationEnabled && winRate > 0 && winRate < 50 && sellTrades.length >= 5){
+    suggestions.push({ level:'tip', text:`Multi-timeframe-bevestiging staat uit. Met een win rate van ${fmt(winRate,0)}% kan het helpen om signalen te filteren op een hoger timeframe (bv. 1 uur) — dat voorkomt instappen tegen de grotere trend in.` });
+  }
+  if(!strategy.volumeFilterEnabled && winRate > 0 && winRate < 50 && sellTrades.length >= 5){
+    suggestions.push({ level:'tip', text:`Volume-filter staat uit. Signalen op laag handelsvolume zijn vaak minder betrouwbaar — aanzetten kan zwakke signalen dempen en zo de win rate verbeteren.` });
   }
 
   // Geen enkele suggestie getriggerd? Geef neutrale samenvatting
@@ -2268,7 +2837,7 @@ function showPage(name,btn){
   if(name==='analyse')renderAnalyse();
   if(name==='bot')renderBot();
   if(name==='trades')renderTrades();
-  if(name==='patterns'){renderPatternsPage();renderMarketToggles();updateNotificationToggleUI();updateTrailingToggleUI();}
+  if(name==='patterns'){renderPatternsPage();renderMarketToggles();updateNotificationToggleUI();updateTrailingToggleUI();initAllFeatureToggles();}
 }
 
 // ══════════════════════════════════════════════════════
