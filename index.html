@@ -960,6 +960,28 @@ function setCooldown(sym, reason){
   renderBot();
 }
 
+// ── Open orders hercheck — DE FIX die je vroeg ─────────────────────
+// Voordat de bot een nieuwe order plaatst, checkt hij eerst bij
+// Bitvavo of er al een open order voor deze coin in de wachtstand
+// staat (bv. een limietorder die je zelf had ingesteld, of een vorige
+// order die nog niet volledig is afgehandeld). Is dat zo, dan slaat
+// de bot deze actie over — geen dubbele/conflicterende orders.
+async function hasOpenOrder(sym){
+  if(!window._bvConnected || !window._bvClient) return false;
+  if(!window.BITVAVO_SYMBOL_MAP?.[sym]) return false;
+  try{
+    const openOrders = await window._bvClient.getOpenOrders(sym);
+    return Array.isArray(openOrders) && openOrders.length > 0;
+  } catch(err){
+    // Kunnen we het niet checken? Wees voorzichtig en laat de order
+    // toch doorgaan zodat de bot niet onnodig blijft hangen — de
+    // order zelf wordt nog steeds door Bitvavo's eigen validatie
+    // gecontroleerd.
+    console.warn(`[TradeBot] Open orders check mislukt voor ${sym}:`, err.message);
+    return false;
+  }
+}
+
 // Bot-koop die ECHT door Bitvavo gaat in live modus. Bij een fout
 // komt alleen DEZE coin op cooldown — de bot zelf blijft draaien en
 // probeert het automatisch opnieuw, zonder terug te vallen op paper.
@@ -973,6 +995,12 @@ async function executeBotBuy(sym, price, spend, reason){
     }
     if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
       setCooldown(sym, 'wordt niet ondersteund door Bitvavo');
+      return;
+    }
+    // DE FIX: eerst checken of er al een open order op deze coin staat
+    if(await hasOpenOrder(sym)){
+      addLog(`⏭️ ${sym} overgeslagen — er staat al een open order op Bitvavo`);
+      toast(`⏭️ ${sym}: open order gevonden, koop overgeslagen`,'#ffaa00');
       return;
     }
     try{
@@ -1008,6 +1036,16 @@ async function executeSell(sym,price,pos,reason){
     }
     if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
       setCooldown(sym, 'wordt niet ondersteund door Bitvavo');
+      return;
+    }
+    // DE FIX: eerst checken of er al een open order op deze coin staat.
+    // Bij Stop-Loss/Take-Profit slaan we deze poging dan over, maar de
+    // positie blijft openstaan zodat de bot het bij de volgende tick
+    // (1.5s later) gewoon opnieuw checkt — net zo lang tot de open
+    // order weg is en de verkoop wél door kan gaan.
+    if(await hasOpenOrder(sym)){
+      addLog(`⏭️ ${sym} ${reason} overgeslagen — er staat al een open order op Bitvavo, volgende poging bij de eerstvolgende controle`);
+      toast(`⏭️ ${sym}: open order gevonden, verkoop nog even uitgesteld`,'#ffaa00');
       return;
     }
     try{
@@ -1053,6 +1091,11 @@ async function manualBuy(){
     }
     if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
       toast(`${sym} wordt niet ondersteund door Bitvavo`,'#ff4757');
+      return;
+    }
+    // DE FIX: ook bij handmatig kopen eerst checken op open orders
+    if(await hasOpenOrder(sym)){
+      toast(`⏭️ ${sym}: er staat al een open order op Bitvavo`,'#ffaa00');
       return;
     }
     try{

@@ -462,16 +462,21 @@ class BitvavoClient {
     return res?.response || res;
   }
 
+  // DE FIX: de juiste actie heet 'privateGetOrdersOpen', niet 'getOrders'
+  // met een status-filter — die laatste bestaat niet als losse actie.
   async getOpenOrders(ourSymbol) {
     const market = BV_SYMBOL_MAP[ourSymbol];
-    const res = await this._request('getOrders', market ? { market, status:'open' } : { status:'open' });
-    return res?.response || res;
+    const res = await this._request('privateGetOrdersOpen', market ? { market } : {});
+    const data = res?.response || res;
+    return Array.isArray(data) ? data : (data ? [data] : []);
   }
 
+  // DE FIX: 'privateCancelOrder', niet 'cancelOrder' (die mist het
+  // verplichte 'private'-voorvoegsel voor geauthenticeerde acties)
   async cancelOrder(ourSymbol, orderId) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error('Onbekend paar');
-    const res = await this._request('cancelOrder', { market, orderId });
+    const res = await this._request('privateCancelOrder', { market, orderId, operatorId: 1001 });
     return res?.response || res;
   }
 
