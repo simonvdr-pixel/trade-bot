@@ -1924,6 +1924,107 @@ async function runBacktest(){
   }
 }
 
+// ── Automatische analyse van backtest-resultaten ─────────────────────
+// Kijkt naar concrete patronen in de uitkomst (welke exit-reden het
+// vaakst voorkwam, hoe groot fees zijn t.o.v. winst, hoe vaak er
+// helemaal geen signaal kwam, etc.) en geeft op basis daarvan
+// onderbouwde, actiegerichte suggesties — geen generieke tips.
+function analyzeBacktest(result, sym, candles){
+  const { trades, equityCurve, finalValue, startCapital } = result;
+  const pnl = finalValue - startCapital;
+  const pct = (pnl/startCapital)*100;
+  const sellTrades = trades.filter(t=>t.pnl!=null);
+  const wins = sellTrades.filter(t=>t.pnl>0);
+  const losses = sellTrades.filter(t=>t.pnl<=0);
+  const winRate = sellTrades.length ? (wins.length/sellTrades.length)*100 : 0;
+  const totalFees = trades.reduce((a,t)=>a+(t.fee||0),0);
+  const avgWin = wins.length ? wins.reduce((a,t)=>a+t.pnl,0)/wins.length : 0;
+  const avgLoss = losses.length ? Math.abs(losses.reduce((a,t)=>a+t.pnl,0)/losses.length) : 0;
+  const firstPrice = candles[0].c, lastPrice = candles[candles.length-1].c;
+  const buyHoldPct = ((lastPrice-firstPrice)/firstPrice)*100;
+  let peak = startCapital, maxDrawdown = 0;
+  equityCurve.forEach(p=>{ if(p.value>peak) peak=p.value; const dd=((peak-p.value)/peak)*100; if(dd>maxDrawdown) maxDrawdown=dd; });
+
+  // Exit-redenen tellen
+  const exitCounts = {};
+  sellTrades.forEach(t=>{ exitCounts[t.reason] = (exitCounts[t.reason]||0)+1; });
+  const stopLossCount = exitCounts['Stop-Loss']||0;
+  const takeProfitCount = exitCounts['Take-Profit']||0;
+  const trailingCount = exitCounts['Trailing Stop']||0;
+  const totalExits = sellTrades.length || 1;
+
+  const suggestions = []; // { level: 'critical'|'warning'|'tip'|'good', text }
+
+  // 1. Geen of nauwelijks trades — strategie reageert niet
+  if(trades.length === 0){
+    suggestions.push({ level:'critical', text:`Geen enkele trade in deze periode. Je RSI-drempels (${strategy.rsiOversold}/${strategy.rsiOverbought}) of patroonfilters zijn waarschijnlijk te streng voor ${sym} — verruim de RSI oversold-grens (bv. naar 35-40) of test met "Combined" i.p.v. een enkele indicator.` });
+  } else if(trades.length < 3 && btPeriodDays >= 30){
+    suggestions.push({ level:'warning', text:`Maar ${trades.length} trade(s) in ${btPeriodDays} dagen — de strategie is mogelijk te conservatief. Overweeg een lager RSI-oversold-niveau of een korter interval (bv. 15min i.p.v. 1 uur) om meer kansen te vangen.` });
+  }
+
+  // 2. Win rate laag terwijl gem. winst > gem. verlies (of omgekeerd)
+  if(sellTrades.length >= 5){
+    if(winRate < 40 && avgWin < avgLoss*1.5){
+      suggestions.push({ level:'critical', text:`Win rate is laag (${fmt(winRate,0)}%) én je gemiddelde winst (€${fmt(avgWin)}) compenseert het gemiddelde verlies (€${fmt(avgLoss)}) niet genoeg. Verklein je Stop-Loss (huidig: ${strategy.stopLoss}%) of verruim je Take-Profit (huidig: ${strategy.takeProfit}%) zodat winnaars zwaarder wegen dan verliezers.` });
+    } else if(winRate < 40 && avgWin >= avgLoss*1.5){
+      suggestions.push({ level:'tip', text:`Win rate is laag (${fmt(winRate,0)}%), maar je winnaars zijn groter dan je verliezers (€${fmt(avgWin)} vs €${fmt(avgLoss)}) — dat compenseert deels. Dit kan een geldige "low win-rate, high reward" strategie zijn, mits je hier psychologisch tegen kan (veel kleine verliezen op rij).` });
+    } else if(winRate >= 60){
+      suggestions.push({ level:'good', text:`Sterke win rate van ${fmt(winRate,0)}% — de signaalherkenning werkt goed op deze coin/periode. Overweeg de positiegrootte iets te verhogen (huidig: ${strategy.positionSize}%) als je hier vertrouwen in hebt.` });
+    }
+  }
+
+  // 3. Stop-loss raakt veel vaker dan take-profit
+  if(totalExits >= 5){
+    const slRatio = stopLossCount/totalExits;
+    const tpRatio = takeProfitCount/totalExits;
+    if(slRatio > 0.6){
+      suggestions.push({ level:'warning', text:`${fmt(slRatio*100,0)}% van je exits was een Stop-Loss (${stopLossCount}/${totalExits}). De stop staat mogelijk te strak voor de volatiliteit van ${sym} — probeer ${strategy.stopLoss+2}-${strategy.stopLoss+4}% i.p.v. ${strategy.stopLoss}%, of zet Trailing Stop-Loss aan om ruimte te geven aan normale prijsschommelingen.` });
+    } else if(tpRatio > 0.6 && !strategy.trailingStopEnabled){
+      suggestions.push({ level:'tip', text:`${fmt(tpRatio*100,0)}% van je exits was Take-Profit (${takeProfitCount}/${totalExits}) — de prijs liep dus vaak door ná je exit. Zet Trailing Stop-Loss aan (in plaats van een vaste Take-Profit) om mee te liften op langere opwaartse bewegingen.` });
+    }
+  }
+
+  // 4. Trailing stop aan, maar nooit geraakt — onnodige complexiteit
+  if(strategy.trailingStopEnabled && trailingCount === 0 && sellTrades.length >= 3){
+    suggestions.push({ level:'tip', text:`Trailing Stop-Loss staat aan maar werd in deze test nooit geraakt — je vaste Stop-Loss/Take-Profit grijpen er steeds eerder in. Verklein de trailing-afstand (huidig: ${strategy.trailingStopPct}%) als je 'm daadwerkelijk wil laten meewegen.` });
+  }
+
+  // 5. Fees vs. winst — te veel kleine trades
+  if(pnl > 0 && totalFees > pnl*0.25){
+    suggestions.push({ level:'warning', text:`Fees (€${fmt(totalFees)}) vormen meer dan 25% van je winst (€${fmt(pnl)}). Met ${trades.length} trades in ${btPeriodDays} dagen handel je waarschijnlijk te frequent voor deze positiegrootte — verhoog de positiegrootte (huidig: ${strategy.positionSize}%) of verminder het aantal trades met strengere instapcriteria.` });
+  } else if(totalFees > Math.abs(pnl) && pnl < 0){
+    suggestions.push({ level:'critical', text:`Je fees (€${fmt(totalFees)}) zijn groter dan je verlies (€${fmt(Math.abs(pnl))}) — zonder fees was deze strategie al verlieslatend geweest. Dit is een teken dat de strategie überhaupt geen edge heeft op deze coin in deze periode, los van transactiekosten.` });
+  }
+
+  // 6. Vergelijking met buy & hold
+  if(pct < buyHoldPct - 5){
+    suggestions.push({ level:'warning', text:`De strategie presteerde ${fmt(buyHoldPct-pct,1)}% slechter dan simpelweg kopen en vasthouden. Voor ${sym} in deze periode (${fmtPct(buyHoldPct)}) voegde actief handelen geen waarde toe — overweeg een ander interval, een andere coin, of een eenvoudigere/minder frequente strategie.` });
+  } else if(pct > buyHoldPct + 5){
+    suggestions.push({ level:'good', text:`De strategie verslaat buy & hold met ${fmt(pct-buyHoldPct,1)}% — een sterk signaal dat de actieve aanpak hier waarde toevoegt op ${sym}.` });
+  }
+
+  // 7. Drawdown te hoog t.o.v. rendement
+  if(maxDrawdown > 0 && pct > 0 && maxDrawdown > pct*2){
+    suggestions.push({ level:'warning', text:`Max drawdown (-${fmt(maxDrawdown,1)}%) is meer dan dubbel zo groot als je uiteindelijke rendement (${fmtPct(pct)}). Dat betekent veel onderweg-stress voor relatief weinig netto resultaat — een strakkere Stop-Loss of kleinere positiegrootte kan de drawdown beperken.` });
+  }
+  if(maxDrawdown > 30){
+    suggestions.push({ level:'critical', text:`Max drawdown van -${fmt(maxDrawdown,1)}% is fors — op een echt account zou dit betekenen dat je portefeuille op enig moment meer dan ${fmt(maxDrawdown,0)}% lager stond dan zijn piek. Verklein de positiegrootte (huidig: ${strategy.positionSize}%) of verstevig de Stop-Loss.` });
+  }
+
+  // 8. Maximaal aantal open posities nooit bereikt — ruimte onbenut
+  // (alleen relevant info, geen probleem, dus als 'tip' tonen indien van toepassing)
+  if(pnl > 0 && sellTrades.length >= 5 && winRate >= 55 && maxDrawdown < 15){
+    suggestions.push({ level:'good', text:`Solide combinatie van win rate (${fmt(winRate,0)}%) en beperkte drawdown (-${fmt(maxDrawdown,1)}%). Dit lijkt een stabiele basis — test deze instellingen ook op een langere periode (90 dagen) en een paar andere coins voordat je live gaat.` });
+  }
+
+  // Geen enkele suggestie getriggerd? Geef neutrale samenvatting
+  if(suggestions.length === 0){
+    suggestions.push({ level:'tip', text:`Resultaten zijn gemiddeld — geen uitgesproken probleem of sterk punt gevonden. Test een langere periode of vergelijk met een ander interval om een duidelijker beeld te krijgen.` });
+  }
+
+  return suggestions;
+}
+
 function renderBacktestResults(result, sym, candles){
   const { trades, equityCurve, finalValue, startCapital } = result;
   const pnl = finalValue - startCapital;
@@ -1953,6 +2054,16 @@ function renderBacktestResults(result, sym, candles){
   resEl.style.display = 'block';
 
   const periodLabel = `${btPeriodDays} dagen · ${btInterval} candles · ${sym}`;
+  const suggestions = analyzeBacktest(result, sym, candles);
+  const levelStyle = {
+    critical: { icon:'🔴', color:'var(--red)',    bg:'#2a0d0d', label:'Kritisch' },
+    warning:  { icon:'🟡', color:'var(--amber)',  bg:'#2a1a00', label:'Let op' },
+    tip:      { icon:'💡', color:'var(--blue)',   bg:'#0d1a2b', label:'Tip' },
+    good:     { icon:'🟢', color:'var(--green)',  bg:'#0d2b1a', label:'Sterk punt' },
+  };
+  // Sorteer: critical eerst, dan warning, dan tip, dan good
+  const order = { critical:0, warning:1, tip:2, good:3 };
+  suggestions.sort((a,b)=>order[a.level]-order[b.level]);
 
   resEl.innerHTML = `
     <div style="text-align:center;margin-bottom:16px">
@@ -1963,6 +2074,21 @@ function renderBacktestResults(result, sym, candles){
 
     <div style="background:var(--panel2);border-radius:10px;padding:8px;margin-bottom:14px">
       <canvas id="bt-equity-chart" height="120" style="width:100%;display:block"></canvas>
+    </div>
+
+    <!-- Automatische analyse & verbetersuggesties -->
+    <div class="card" style="margin:0 0 14px;padding:14px;border-color:var(--purple)44">
+      <div class="card-title">🧠 Wat kan er beter?</div>
+      ${suggestions.map(s=>{
+        const st = levelStyle[s.level];
+        return `<div style="display:flex;gap:10px;background:${st.bg};border-radius:8px;padding:10px 12px;margin-bottom:8px">
+          <div style="font-size:16px;flex-shrink:0">${st.icon}</div>
+          <div>
+            <div style="font-size:10px;font-weight:700;color:${st.color};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">${st.label}</div>
+            <div style="font-size:12px;color:var(--text);line-height:1.5">${s.text}</div>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
