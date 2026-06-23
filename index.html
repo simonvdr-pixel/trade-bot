@@ -228,8 +228,8 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px">
       <div style="font-size:20px">⏳</div>
       <div style="flex:1">
-        <div style="font-weight:800;color:var(--amber);font-size:14px">Even wachten voor sommige coins</div>
-        <div style="font-size:11px;color:var(--sub);margin-top:2px">De bot blijft draaien en probeert dit automatisch opnieuw — geen actie nodig.</div>
+        <div style="font-weight:800;color:var(--amber);font-size:14px">Nieuwe aankopen even gepauzeerd</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">Stop-loss en take-profit verkopen gaan altijd door, ook hieronder. De bot probeert nieuwe aankopen automatisch opnieuw — geen actie nodig.</div>
       </div>
     </div>
     <div id="cooldown-list"></div>
@@ -525,7 +525,7 @@ let prices={},history={},candles={};
 let openPositions=JSON.parse(localStorage.getItem('tb_positions')||'{}');
 let trades=JSON.parse(localStorage.getItem('tb_trades')||'[]');
 let customPatterns=JSON.parse(localStorage.getItem('tb_custom_patterns')||'[]');
-let botActive=false,botLog=[],currentPair='XAU/USD',currentTF='5m';
+let botActive=localStorage.getItem('tb_bot_active')==='1',botLog=[],currentPair='XAU/USD',currentTF='5m';
 // ── Trading modus ─────────────────────────────────────────────
 let tradingMode = localStorage.getItem('tb_mode') || 'paper'; // 'paper' | 'live'
 
@@ -576,8 +576,15 @@ Object.entries(MARKETS).forEach(([sym,m])=>{
   let p=m.base;candles[sym]=[];
   for(let i=0;i<100;i++){const cd=genCandle(p,m.vol);candles[sym].push(cd);p=cd.c;}
 });
+// Welke paren krijgen hun prijzen LIVE van Bitvavo? Voor die paren
+// mag de simulator (tick) nooit overschrijven — anders vechten de
+// simulatie en de echte WebSocket-data om dezelfde variabele en
+// "wint" de nepdata steeds opnieuw omdat tick() vaker draait.
+let liveFedSymbols = new Set();
+
 function tick(){
   Object.entries(MARKETS).forEach(([sym,m])=>{
+    if(liveFedSymbols.has(sym)) return; // live data heeft hier al voorrang
     const cd=genCandle(prices[sym],m.vol);
     prices[sym]=cd.c;
     history[sym]=[...history[sym].slice(-299),cd.c];
@@ -856,17 +863,20 @@ function runBot(){
   strategy.markets.forEach(sym=>{
     const price=prices[sym];if(!price)return;
 
-    // Coin staat nog in cooldown na een eerdere fout — sla over, bot
-    // blijft verder gewoon draaien voor de andere markten
-    if(liveErrorCooldown[sym] && liveErrorCooldown[sym] > now) return;
-
     const pos=openPositions[sym];
     if(pos){
+      // Stop-loss en take-profit gaan ALTIJD door, ook als deze coin
+      // toevallig in cooldown staat na een eerdere fout — je wilt
+      // nooit dat een verlies-beperkende verkoop wordt tegengehouden.
       const pct=((price-pos.entryPrice)/pos.entryPrice)*100;
       if(pct<=-strategy.stopLoss)executeSell(sym,price,pos,'Stop-Loss');
       else if(pct>=strategy.takeProfit)executeSell(sym,price,pos,'Take-Profit');
       return;
     }
+
+    // Cooldown blokkeert alleen NIEUWE aankopen, nooit verkopen
+    if(liveErrorCooldown[sym] && liveErrorCooldown[sym] > now) return;
+
     const sig=getSignal(sym);
     const custom=detectCustom(sym);
     const hasCritical=custom.some(c=>c.priority==='critical');
@@ -1436,6 +1446,7 @@ function save(){
   localStorage.setItem('tb_positions',JSON.stringify(openPositions));
   localStorage.setItem('tb_trades',JSON.stringify(trades));
   localStorage.setItem('tb_custom_patterns',JSON.stringify(customPatterns));
+  localStorage.setItem('tb_bot_active', botActive ? '1' : '0');
 }
 
 // ══════════════════════════════════════════════════════
@@ -1447,7 +1458,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(
 // EVENTS
 // ══════════════════════════════════════════════════════
 document.getElementById('toggle-bot-btn').addEventListener('click',()=>{
-  botActive=!botActive;addLog(botActive?'▶ Bot gestart':'⏹ Bot gestopt');renderBot();
+  botActive=!botActive;addLog(botActive?'▶ Bot gestart':'⏹ Bot gestopt');save();renderBot();
 });
 document.getElementById('btn-buy').addEventListener('click',manualBuy);
 document.getElementById('btn-sell').addEventListener('click',manualSell);
@@ -1488,6 +1499,30 @@ if(!localStorage.getItem('tb_cash')){
     window._bvConnected = true;
     if(badge) badge.innerHTML='<span class="badge" style="background:#0d2b1a;color:var(--green)">🟢 Bitvavo live</span>';
 
+    // Markeer deze paren als "live gevoed" zodat de simulator (tick)
+    // ze niet langer overschrijft met nepdata. Ook de oude
+    // gesimuleerde geschiedenis wissen, zodat grafieken niet half
+    // nep / half echt worden.
+    livePairs.forEach(sym => {
+      liveFedSymbols.add(sym);
+      history[sym] = [];
+      candles[sym] = [];
+    });
+
+    // Direct alle huidige prijzen ophalen — anders zie je tot de
+    // eerste ticker-update nog de oude/nep waarde staan
+    bvClient.getAllTickerPrices().then(allPrices => {
+      Object.entries(allPrices).forEach(([sym, p]) => {
+        if (prices[sym] !== undefined) {
+          prices[sym] = p;
+          history[sym] = [p];
+        }
+      });
+      renderMarkets();
+      if(document.getElementById('page-analyse').classList.contains('active')) renderAnalyse();
+      console.log('[TradeBot] Initiële prijzen geladen:', Object.keys(allPrices).length, 'paren');
+    }).catch(err => console.warn('[TradeBot] Kon initiële prijzen niet ophalen:', err.message));
+
     // Live prijzen via WebSocket ticker subscription
     bvClient.onPrice = (sym, price) => {
       if(prices[sym] !== undefined){
@@ -1499,11 +1534,11 @@ if(!localStorage.getItem('tb_cash')){
 
     // Live candles
     bvClient.onCandle = (sym, candle) => {
-      if(candles[sym]) candles[sym] = [...candles[sym].slice(-299), candle];
+      if(candles[sym] !== undefined) candles[sym] = [...candles[sym].slice(-299), candle];
     };
     bvClient.subscribeCandles(livePairs, '5m');
 
-    console.log('[TradeBot] Bitvavo WebSocket verbonden en geabonneerd');
+    console.log('[TradeBot] Bitvavo WebSocket verbonden en geabonneerd —', livePairs.length, 'paren live');
   };
 
   bvClient.onError = (msg) => {
@@ -1513,6 +1548,9 @@ if(!localStorage.getItem('tb_cash')){
 
   bvClient.onDisconnect = () => {
     window._bvConnected = false;
+    // Simulator mag deze paren weer overnemen zolang er geen live
+    // verbinding is, zodat de app niet helemaal stil komt te liggen
+    liveFedSymbols.clear();
     if(badge) badge.innerHTML='<span class="badge" style="background:var(--panel2);color:var(--dim)">🔌 Herverbinden...</span>';
   };
 

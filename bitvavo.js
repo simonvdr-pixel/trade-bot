@@ -342,6 +342,20 @@ class BitvavoClient {
     throw new Error('Geen prijs beschikbaar in orderboek');
   }
 
+  // ── Alle huidige prijzen in één keer ophalen ────────────────────
+  // Gebruik dit direct na verbinden, zodat je niet moet wachten tot
+  // de ticker-subscriptie toevallig een prijswijziging doorstuurt.
+  async getAllTickerPrices() {
+    const res = await this._request('getTickerPrice', {});
+    const data = Array.isArray(res) ? res : (res ? [res] : []);
+    const result = {};
+    data.forEach(t => {
+      const ourSym = BV_SYMBOL_REV[t.market];
+      if (ourSym && t.price) result[ourSym] = parseFloat(t.price);
+    });
+    return result;
+  }
+
   // ── Candle geschiedenis ──────────────────────────────────────────
   async getCandles(ourSymbol, interval = '5m', limit = 200) {
     const market = BV_SYMBOL_MAP[ourSymbol];
