@@ -306,6 +306,51 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     </div>
   </div>
 
+  <!-- Trailing Stop-Loss -->
+  <div class="card">
+    <div class="card-title">📈 Trailing Stop-Loss</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Volgt de prijs omhoog mee en verkoopt als de prijs vanaf de top te veel terugvalt — blokkeert winst i.p.v. alleen verlies te beperken.</div>
+      <div onclick="toggleTrailingStop()" id="trailing-toggle" style="width:44px;height:24px;border-radius:12px;background:var(--border);position:relative;cursor:pointer;flex-shrink:0;margin-left:10px">
+        <div id="trailing-toggle-dot" style="position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--sub);transition:all 0.2s"></div>
+      </div>
+    </div>
+    <div id="trailing-settings" style="display:none">
+      <div class="setting-row" style="margin-bottom:0">
+        <div class="setting-label"><span>Trailing afstand</span><span id="lbl-trail">3%</span></div>
+        <input type="range" min="1" max="15" value="3" oninput="document.getElementById('lbl-trail').textContent=this.value+'%';strategy.trailingStopPct=+this.value"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fees & Slippage -->
+  <div class="card">
+    <div class="card-title">💸 Fees & Slippage (Bitvavo)</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:12px">Wordt verwerkt in de P&L-berekening van Paper trades, zodat het rendement realistisch blijft.</div>
+    <div class="setting-row">
+      <div class="setting-label"><span>Taker fee</span><span id="lbl-fee">0.25%</span></div>
+      <input type="range" min="0" max="1" step="0.05" value="0.25" oninput="document.getElementById('lbl-fee').textContent=this.value+'%';strategy.takerFeePct=+this.value"/>
+    </div>
+    <div class="setting-row" style="margin-bottom:0">
+      <div class="setting-label"><span>Geschatte slippage</span><span id="lbl-slip">0.05%</span></div>
+      <input type="range" min="0" max="0.5" step="0.01" value="0.05" oninput="document.getElementById('lbl-slip').textContent=this.value+'%';strategy.slippagePct=+this.value"/>
+    </div>
+  </div>
+
+  <!-- Portfolio risicobeheer -->
+  <div class="card">
+    <div class="card-title">🛡️ Portfolio-niveau risico</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:12px">Beschermt tegen overconcentratie — voorkomt te veel open posities of te grote crypto-blootstelling tegelijk.</div>
+    <div class="setting-row">
+      <div class="setting-label"><span>Max. open posities</span><span id="lbl-maxpos">3</span></div>
+      <input type="range" min="1" max="10" value="3" oninput="document.getElementById('lbl-maxpos').textContent=this.value;strategy.maxOpenPositions=+this.value"/>
+    </div>
+    <div class="setting-row" style="margin-bottom:0">
+      <div class="setting-label"><span>Max. crypto-blootstelling</span><span id="lbl-maxexp">60%</span></div>
+      <input type="range" min="10" max="100" step="5" value="60" oninput="document.getElementById('lbl-maxexp').textContent=this.value+'%';strategy.maxPortfolioExposurePct=+this.value"/>
+    </div>
+  </div>
+
   <!-- Capital reset -->
   <div class="card">
     <div class="card-title">Kapitaal resetten</div>
@@ -319,6 +364,29 @@ input[type=range]{width:100%;accent-color:var(--blue)}
   <div class="card">
     <div class="card-title">Bot markten</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px" id="market-toggles"></div>
+  </div>
+
+  <!-- Notificaties -->
+  <div class="card">
+    <div class="card-title">🔔 Notificaties</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Krijg een melding op je telefoon zodra de bot koopt, verkoopt, of een probleem tegenkomt — ook als de app op de achtergrond staat.</div>
+      <div onclick="toggleNotifications()" id="notif-toggle" style="width:44px;height:24px;border-radius:12px;background:var(--border);position:relative;cursor:pointer;flex-shrink:0;margin-left:10px">
+        <div id="notif-toggle-dot" style="position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--sub);transition:all 0.2s"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backtesting entry point -->
+  <div class="card" style="background:linear-gradient(135deg,#1a1030,#12151f);border:1px solid var(--purple)44">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="font-size:24px">🧪</div>
+      <div>
+        <div style="font-weight:800;font-size:14px;color:var(--purple)">Backtesten</div>
+        <div style="font-size:11px;color:var(--sub)">Test je huidige strategie op historische data, vóórdat je er echt geld op zet.</div>
+      </div>
+    </div>
+    <button onclick="openBacktest()" style="width:100%;padding:12px;background:var(--purple);border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer">Backtest starten →</button>
   </div>
 </div>
 
@@ -342,6 +410,56 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="18" rx="1"/><rect x="9" y="8" width="6" height="13" rx="1"/><rect x="16" y="5" width="6" height="16" rx="1"/></svg>Patronen
   </button>
 </nav>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- BACKTEST MODAL -->
+<!-- ════════════════════════════════════════════════ -->
+<div id="backtest-overlay" onclick="if(event.target===this)closeBacktest()" style="position:fixed;inset:0;background:#000a;z-index:300;display:none;align-items:flex-end;justify-content:center">
+<div id="backtest-box" style="background:var(--panel);border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding:20px 16px calc(20px + var(--safe-bot))">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <div style="font-size:17px;font-weight:800">🧪 Backtest</div>
+    <button onclick="closeBacktest()" style="background:none;border:none;color:var(--sub);font-size:22px;cursor:pointer;padding:0 4px">✕</button>
+  </div>
+  <div style="font-size:12px;color:var(--sub);margin-bottom:16px">Test je huidige strategie-instellingen op historische Bitvavo-data.</div>
+
+  <!-- Setup -->
+  <div id="backtest-setup">
+    <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Markt</label>
+    <select id="bt-market" style="width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;margin-bottom:14px"></select>
+
+    <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Periode</label>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <button class="tf-tab active" id="bt-period-7" onclick="setBacktestPeriod(7)">7 dagen</button>
+      <button class="tf-tab" id="bt-period-30" onclick="setBacktestPeriod(30)">30 dagen</button>
+      <button class="tf-tab" id="bt-period-90" onclick="setBacktestPeriod(90)">90 dagen</button>
+    </div>
+
+    <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Tijdsinterval</label>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <button class="tf-tab" id="bt-interval-15m" onclick="setBacktestInterval('15m')">15min</button>
+      <button class="tf-tab active" id="bt-interval-1h" onclick="setBacktestInterval('1h')">1 uur</button>
+      <button class="tf-tab" id="bt-interval-4h" onclick="setBacktestInterval('4h')">4 uur</button>
+    </div>
+
+    <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">Startkapitaal voor de test</label>
+    <input type="number" id="bt-capital" value="10000" style="width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;margin-bottom:16px"/>
+
+    <div style="background:var(--panel2);border-radius:10px;padding:12px;margin-bottom:16px;font-size:11px;color:var(--sub);line-height:1.6">
+      <b style="color:var(--text)">Gebruikte instellingen:</b><br>
+      Strategie: <span id="bt-summary-strategy" style="color:var(--text)"></span><br>
+      Stop-Loss: <span id="bt-summary-sl" style="color:var(--red)"></span> ·
+      Take-Profit: <span id="bt-summary-tp" style="color:var(--green)"></span><br>
+      Trailing stop: <span id="bt-summary-trail" style="color:var(--text)"></span><br>
+      Fee: <span id="bt-summary-fee" style="color:var(--text)"></span> · Slippage: <span id="bt-summary-slip" style="color:var(--text)"></span>
+    </div>
+
+    <button onclick="runBacktest()" id="bt-run-btn" style="width:100%;padding:14px;background:var(--purple);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer">▶ Backtest uitvoeren</button>
+  </div>
+
+  <!-- Resultaten -->
+  <div id="backtest-results" style="display:none"></div>
+</div>
+</div>
 
 <!-- ════════════════════════════════════════════════ -->
 <!-- PATTERN BUILDER MODAL -->
@@ -554,7 +672,44 @@ let strategy={
   positionSize:10,stopLoss:5,takeProfit:10,
   markets:['BTC/EUR','ETH/EUR','SOL/EUR','XRP/EUR'],
   activePatterns:Object.keys(PATTERN_DEFS),
+  // ── Trailing stop-loss ──────────────────────────────────────────
+  trailingStopEnabled:false,
+  trailingStopPct:3,        // % onder de hoogst bereikte prijs
+  // ── Fees & slippage (Bitvavo) ───────────────────────────────────
+  takerFeePct:0.25,         // Bitvavo standaard taker fee bij market orders
+  slippagePct:0.05,         // geschatte gemiddelde slippage bij market orders
+  // ── Portfolio-niveau risicobeheer ───────────────────────────────
+  maxOpenPositions:3,       // max. aantal gelijktijdige open posities
+  maxPortfolioExposurePct:60, // max. % van portfolio in crypto tegelijk
 };
+
+// Houdt per coin de hoogst bereikte prijs bij sinds aankoop — nodig
+// voor de trailing stop-loss berekening
+let trailingHighWaterMark = JSON.parse(localStorage.getItem('tb_trailing_hwm')||'{}');
+
+// ── Fee & slippage helpers ──────────────────────────────────────────
+// Bitvavo rekent altijd een fee bij market orders, en de werkelijke
+// uitvoeringsprijs wijkt vaak iets af van de laatst bekende prijs
+// (slippage). Door dit hier te simuleren/verwerken sluit de getoonde
+// P&L beter aan op wat er werkelijk op je rekening gebeurt.
+function applyBuySlippageAndFee(price, eurAmount){
+  // Bij koop: je betaalt iets méér dan de laatste prijs (slippage),
+  // en de fee wordt ingehouden op het bedrag dat je kunt besteden
+  const effectivePrice = price * (1 + strategy.slippagePct/100);
+  const feeAmount = eurAmount * (strategy.takerFeePct/100);
+  const netSpend = eurAmount - feeAmount; // wat er echt aan coins gekocht wordt
+  const qty = netSpend / effectivePrice;
+  return { effectivePrice, feeAmount, qty };
+}
+function applySellSlippageAndFee(price, qty){
+  // Bij verkoop: je ontvangt iets minder dan de laatste prijs
+  // (slippage), en de fee wordt van de opbrengst afgetrokken
+  const effectivePrice = price * (1 - strategy.slippagePct/100);
+  const grossProceeds = qty * effectivePrice;
+  const feeAmount = grossProceeds * (strategy.takerFeePct/100);
+  const netProceeds = grossProceeds - feeAmount;
+  return { effectivePrice, feeAmount, netProceeds };
+}
 
 // Builder state
 let builderStep=1, builderSeqLen=3, builderBias='bull', builderPrio='normal';
@@ -924,17 +1079,51 @@ function runBot(){
 
     const pos=openPositions[sym];
     if(pos){
+      // ── Trailing stop-loss bijhouden ────────────────────────────
+      // Houd de hoogste prijs sinds aankoop bij; de trailing stop
+      // volgt deze omhoog mee en blokkeert zo winst in plaats van
+      // alleen verlies te beperken.
+      if(strategy.trailingStopEnabled){
+        const hwm = trailingHighWaterMark[sym] || pos.entryPrice;
+        if(price > hwm){
+          trailingHighWaterMark[sym] = price;
+          localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
+        }
+      }
+
       // Stop-loss en take-profit gaan ALTIJD door, ook als deze coin
       // toevallig in cooldown staat na een eerdere fout — je wilt
       // nooit dat een verlies-beperkende verkoop wordt tegengehouden.
       const pct=((price-pos.entryPrice)/pos.entryPrice)*100;
-      if(pct<=-strategy.stopLoss)executeSell(sym,price,pos,'Stop-Loss');
-      else if(pct>=strategy.takeProfit)executeSell(sym,price,pos,'Take-Profit');
+
+      if(strategy.trailingStopEnabled){
+        const hwm = trailingHighWaterMark[sym] || pos.entryPrice;
+        const trailPct = ((price-hwm)/hwm)*100;
+        if(trailPct <= -strategy.trailingStopPct){
+          executeSell(sym,price,pos,'Trailing Stop');
+          return;
+        }
+      }
+      if(pct<=-strategy.stopLoss){executeSell(sym,price,pos,'Stop-Loss');return;}
+      else if(pct>=strategy.takeProfit){executeSell(sym,price,pos,'Take-Profit');return;}
       return;
     }
 
     // Cooldown blokkeert alleen NIEUWE aankopen, nooit verkopen
     if(liveErrorCooldown[sym] && liveErrorCooldown[sym] > now) return;
+
+    // ── Portfolio-niveau risicobeheer ──────────────────────────────
+    // Geen nieuwe positie openen als we al op het max. aantal open
+    // posities zitten, of als de totale crypto-blootstelling al boven
+    // de ingestelde grens zit — beschermt tegen overconcentratie bij
+    // een markt-brede crash.
+    const openCount = Object.keys(openPositions).length;
+    if(openCount >= strategy.maxOpenPositions) return;
+
+    const tv = totalValue();
+    const currentExposure = Object.entries(openPositions).reduce((a,[s,p])=>a+(p.qty*(prices[s]||p.entryPrice)),0);
+    const exposurePct = tv>0 ? (currentExposure/tv)*100 : 0;
+    if(exposurePct >= strategy.maxPortfolioExposurePct) return;
 
     const sig=getSignal(sym);
     const custom=detectCustom(sym);
@@ -943,7 +1132,11 @@ function runBot(){
     if(hasCritical&&sig.signal!=='VERKOPEN'){shouldBuy=true;reason='🔥 '+custom.find(c=>c.priority==='critical').name;}
     else if(sig.signal==='KOPEN'){shouldBuy=true;reason=sig.reasons[0]||'Signaal';}
     if(shouldBuy){
-      const spend=cash*(strategy.positionSize/100);if(spend<1)return;
+      let spend=cash*(strategy.positionSize/100);if(spend<1)return;
+      // Nooit meer uitgeven dan de resterende exposure-ruimte toelaat
+      const maxAllowedSpend = tv*(strategy.maxPortfolioExposurePct/100) - currentExposure;
+      if(maxAllowedSpend < 1) return;
+      spend = Math.min(spend, maxAllowedSpend);
       executeBotBuy(sym, price, spend, reason);
     }
   });
@@ -957,6 +1150,7 @@ function setCooldown(sym, reason){
   liveLastError[sym] = reason;
   addLog(`⏳ ${sym} wacht ${LIVE_RETRY_DELAY_MS/1000}s na fout: ${reason}`);
   toast(`⏳ ${sym} even gepauzeerd, bot probeert later opnieuw`, '#ffaa00');
+  sendNotification('⚠️ Probleem met '+sym, reason, 'tradebot-error');
   renderBot();
 }
 
@@ -1011,6 +1205,7 @@ async function executeBotBuy(sym, price, spend, reason){
       openPositions[sym] = {qty:realQty, entryPrice:realPrice};
       addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason});
       addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins) — ${reason}`);
+      sendNotification('💶 Bot kocht '+sym, `€${fmt(realPrice)} per coin — ${reason}`, 'tradebot-buy');
       syncRealBalances(); // direct verversen, niet wachten op de 15s interval
       toast(`💶 BUY ${sym} — ECHTE ORDER`,'#00d68f');
       delete liveErrorCooldown[sym]; // gelukt — cooldown opheffen
@@ -1021,10 +1216,14 @@ async function executeBotBuy(sym, price, spend, reason){
     return;
   }
 
-  // Paper modus — gewoon gesimuleerd, geen koppeling nodig
-  cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
-  addTrade({sym,side:'BUY',qty:spend/price,price,reason});
-  addLog(`🟢 ${modeTag} BUY ${sym} @ €${fmt(price)} — ${reason}`);
+  // Paper modus — gesimuleerd, met fee & slippage voor realistische P&L
+  const { effectivePrice, feeAmount, qty } = applyBuySlippageAndFee(price, spend);
+  cash-=spend;
+  openPositions[sym]={qty, entryPrice:effectivePrice, feePaid:feeAmount};
+  trailingHighWaterMark[sym] = effectivePrice; // start trailing-tracking
+  localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
+  addTrade({sym,side:'BUY',qty,price:effectivePrice,reason,fee:feeAmount});
+  addLog(`🟢 ${modeTag} BUY ${sym} @ €${fmt(effectivePrice)} (fee €${fmt(feeAmount)}) — ${reason}`);
   toast(`${modeTag} BUY ${sym}`,'#00d68f');save();
 }
 
@@ -1053,8 +1252,11 @@ async function executeSell(sym,price,pos,reason){
       const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
       const pnl = pos.qty*realPrice - pos.qty*pos.entryPrice;
       delete openPositions[sym];
+      delete trailingHighWaterMark[sym];
+      localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
       addTrade({sym,side:'SELL',qty:pos.qty,price:realPrice,pnl,reason});
       addLog(`✅ 💶 BITVAVO ORDER: SELL ${sym} @ €${fmt(realPrice)} — ${reason}`);
+      sendNotification('💶 Bot verkocht '+sym, `${reason}: ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`, 'tradebot-sell');
       syncRealBalances(); // direct verversen, niet wachten op de 15s interval
       toast(`💶 ${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
       delete liveErrorCooldown[sym];
@@ -1065,11 +1267,17 @@ async function executeSell(sym,price,pos,reason){
     return;
   }
 
-  // Paper modus — gesimuleerd
-  const pnl=pos.qty*price-pos.qty*pos.entryPrice;
-  cash+=pos.qty*price;delete openPositions[sym];
-  addTrade({sym,side:'SELL',qty:pos.qty,price,pnl,reason});
-  addLog(`📄 ${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(price)} — ${reason}`);
+  // Paper modus — gesimuleerd, met fee & slippage voor realistische P&L
+  const { effectivePrice, feeAmount, netProceeds } = applySellSlippageAndFee(price, pos.qty);
+  const totalCostBasis = pos.qty*pos.entryPrice + (pos.feePaid||0); // incl. aankoopfee
+  const pnl = netProceeds - totalCostBasis;
+  cash += netProceeds;
+  delete openPositions[sym];
+  delete trailingHighWaterMark[sym];
+  localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
+  addTrade({sym,side:'SELL',qty:pos.qty,price:effectivePrice,pnl,reason,fee:feeAmount});
+  addLog(`📄 ${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(effectivePrice)} (fee €${fmt(feeAmount)}) — ${reason}`);
+  sendNotification('📄 Bot verkocht '+sym, `${reason}: ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`, 'tradebot-sell');
   toast(`${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
   save();
 }
@@ -1104,8 +1312,11 @@ async function manualBuy(){
       const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
       cash -= spend;
       openPositions[sym] = {qty:realQty, entryPrice:realPrice};
+      trailingHighWaterMark[sym] = realPrice;
+      localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
       addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason:'Handmatig (Bitvavo)'});
       addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins)`);
+      sendNotification('💶 Order uitgevoerd: '+sym, `Gekocht voor €${fmt(realPrice)} per coin`, 'tradebot-buy');
       syncRealBalances(); // direct verversen, niet wachten op de 15s interval
       toast(`💶 BUY ${sym} — ECHTE ORDER`,'#00d68f');
       delete liveErrorCooldown[sym];
@@ -1117,10 +1328,14 @@ async function manualBuy(){
     return;
   }
 
-  // Paper modus
-  cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
-  addTrade({sym,side:'BUY',qty:spend/price,price,reason:'Handmatig'});
-  addLog(`🟢 📄 HANDMATIG BUY ${sym} @ €${fmt(price)}`);toast(`BUY ${sym}`,'#00d68f');save();
+  // Paper modus — met fee & slippage voor realistische P&L
+  const { effectivePrice, feeAmount, qty } = applyBuySlippageAndFee(price, spend);
+  cash-=spend;
+  openPositions[sym]={qty, entryPrice:effectivePrice, feePaid:feeAmount};
+  trailingHighWaterMark[sym] = effectivePrice;
+  localStorage.setItem('tb_trailing_hwm', JSON.stringify(trailingHighWaterMark));
+  addTrade({sym,side:'BUY',qty,price:effectivePrice,reason:'Handmatig',fee:feeAmount});
+  addLog(`🟢 📄 HANDMATIG BUY ${sym} @ €${fmt(effectivePrice)} (fee €${fmt(feeAmount)})`);toast(`BUY ${sym}`,'#00d68f');save();
 }
 function manualSell(){
   const sym=currentPair,pos=openPositions[sym];
@@ -1493,6 +1708,365 @@ function saveCustomPattern(){
 // ══════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════
+async function toggleNotifications(){
+  if(notificationsEnabled){
+    notificationsEnabled = false;
+    localStorage.setItem('tb_notifications','0');
+    updateNotificationToggleUI();
+    toast('Notificaties uitgezet');
+  } else {
+    const granted = await requestNotificationPermission();
+    updateNotificationToggleUI();
+  }
+}
+function updateNotificationToggleUI(){
+  const dot = document.getElementById('notif-toggle-dot');
+  const toggle = document.getElementById('notif-toggle');
+  if(!dot||!toggle) return;
+  if(notificationsEnabled){
+    dot.style.left='22px'; dot.style.background='#000';
+    toggle.style.background='var(--green)';
+  } else {
+    dot.style.left='2px'; dot.style.background='var(--sub)';
+    toggle.style.background='var(--border)';
+  }
+}
+
+function updateTrailingToggleUI(){
+  const dot = document.getElementById('trailing-toggle-dot');
+  const toggle = document.getElementById('trailing-toggle');
+  const settings = document.getElementById('trailing-settings');
+  if(!dot||!toggle) return;
+  if(strategy.trailingStopEnabled){
+    dot.style.left='22px'; dot.style.background='#000';
+    toggle.style.background='var(--green)';
+    settings.style.display='block';
+  } else {
+    dot.style.left='2px'; dot.style.background='var(--sub)';
+    toggle.style.background='var(--border)';
+    settings.style.display='none';
+  }
+}
+
+function toggleTrailingStop(){
+  strategy.trailingStopEnabled = !strategy.trailingStopEnabled;
+  updateTrailingToggleUI();
+  toast(strategy.trailingStopEnabled?'📈 Trailing stop-loss aangezet':'Trailing stop-loss uitgezet', strategy.trailingStopEnabled?'var(--green)':undefined);
+}
+
+// ══════════════════════════════════════════════════════
+// BACKTESTING ENGINE
+// ══════════════════════════════════════════════════════
+let btPeriodDays = 7;
+let btInterval = '1h';
+let btRunning = false;
+
+function openBacktest(){
+  const sel = document.getElementById('bt-market');
+  sel.innerHTML = Object.keys(MARKETS).filter(s=>s!=='XAU/USD'&&s!=='AAPL'&&s!=='EUR/USD')
+    .map(s=>`<option value="${s}">${s}</option>`).join('');
+  sel.value = currentPair && MARKETS[currentPair] ? currentPair : strategy.markets[0];
+
+  document.getElementById('bt-summary-strategy').textContent = strategy.indicator;
+  document.getElementById('bt-summary-sl').textContent = strategy.stopLoss+'%';
+  document.getElementById('bt-summary-tp').textContent = strategy.takeProfit+'%';
+  document.getElementById('bt-summary-trail').textContent = strategy.trailingStopEnabled ? `aan (${strategy.trailingStopPct}%)` : 'uit';
+  document.getElementById('bt-summary-fee').textContent = strategy.takerFeePct+'%';
+  document.getElementById('bt-summary-slip').textContent = strategy.slippagePct+'%';
+
+  document.getElementById('backtest-setup').style.display = 'block';
+  document.getElementById('backtest-results').style.display = 'none';
+  document.getElementById('backtest-overlay').style.display = 'flex';
+}
+function closeBacktest(){
+  document.getElementById('backtest-overlay').style.display = 'none';
+}
+function setBacktestPeriod(days){
+  btPeriodDays = days;
+  [7,30,90].forEach(d=>document.getElementById('bt-period-'+d)?.classList.toggle('active',d===days));
+}
+function setBacktestInterval(iv){
+  btInterval = iv;
+  ['15m','1h','4h'].forEach(i=>document.getElementById('bt-interval-'+i)?.classList.toggle('active',i===iv));
+}
+
+// ── Backtest-versie van het signaalsysteem ──────────────────────────
+// Hergebruikt dezelfde RSI/SMA/patroonlogica als de live bot, maar
+// werkt op een vaste candle-array in plaats van de live 'candles[sym]'
+// state, zodat we door de geschiedenis kunnen lopen zonder de live
+// app-state te raken.
+function btGetSignal(closesSoFar, candlesSoFar){
+  const r = rsiCalc(closesSoFar);
+  const s20 = sma(closesSoFar,20), s50 = sma(closesSoFar,50);
+  const builtInPatterns = detectBuiltIn(candlesSoFar).filter(p=>strategy.activePatterns.includes(p));
+  const pb = patternBias(builtInPatterns);
+  let bull=0,bear=0;
+
+  if(r!=null && (strategy.indicator==='RSI'||strategy.indicator==='Combined')){
+    if(r<strategy.rsiOversold) bull+=2;
+    else if(r>strategy.rsiOverbought) bear+=2;
+  }
+  if(s20&&s50&&(strategy.indicator==='MA'||strategy.indicator==='Combined')){
+    if(s20>s50) bull++; else bear++;
+  }
+  if(strategy.indicator==='Pattern'||strategy.indicator==='Combined'){
+    bull+=pb.bull; bear+=pb.bear;
+  }
+
+  if(bull>bear+1) return 'KOPEN';
+  if(bear>bull+1) return 'VERKOPEN';
+  return 'NEUTRAAL';
+}
+
+// ── De eigenlijke backtest-simulatie ─────────────────────────────────
+function simulateBacktest(candles, startCapital){
+  let cash = startCapital;
+  let position = null; // { qty, entryPrice, hwm }
+  const trades = [];
+  const equityCurve = []; // [{t, value}] voor de grafiek
+  const closes = [];
+
+  for(let i=0; i<candles.length; i++){
+    const c = candles[i];
+    closes.push(c.c);
+    const candlesSoFar = candles.slice(0, i+1);
+    const price = c.c;
+
+    if(position){
+      // Trailing stop bijhouden
+      if(strategy.trailingStopEnabled && price > position.hwm) position.hwm = price;
+
+      const pct = ((price-position.entryPrice)/position.entryPrice)*100;
+      let exitReason = null;
+
+      if(strategy.trailingStopEnabled){
+        const trailPct = ((price-position.hwm)/position.hwm)*100;
+        if(trailPct <= -strategy.trailingStopPct) exitReason = 'Trailing Stop';
+      }
+      if(!exitReason && pct <= -strategy.stopLoss) exitReason = 'Stop-Loss';
+      else if(!exitReason && pct >= strategy.takeProfit) exitReason = 'Take-Profit';
+
+      if(exitReason){
+        const { effectivePrice, feeAmount, netProceeds } = applySellSlippageAndFee(price, position.qty);
+        const costBasis = position.qty*position.entryPrice + position.feePaid;
+        const pnl = netProceeds - costBasis;
+        cash += netProceeds;
+        trades.push({ t:c.t, side:'SELL', price:effectivePrice, qty:position.qty, pnl, reason:exitReason, fee:feeAmount });
+        position = null;
+      }
+    } else {
+      if(closes.length < 26) { // genoeg historie nodig voor MA/RSI
+        equityCurve.push({ t:c.t, value:cash });
+        continue;
+      }
+      const signal = btGetSignal(closes, candlesSoFar);
+      if(signal === 'KOPEN'){
+        const spend = cash * (strategy.positionSize/100);
+        if(spend >= 5){
+          const { effectivePrice, feeAmount, qty } = applyBuySlippageAndFee(price, spend);
+          cash -= spend;
+          position = { qty, entryPrice:effectivePrice, hwm:effectivePrice, feePaid:feeAmount };
+          trades.push({ t:c.t, side:'BUY', price:effectivePrice, qty, pnl:null, reason:signal, fee:feeAmount });
+        }
+      }
+    }
+
+    const posValue = position ? position.qty*price : 0;
+    equityCurve.push({ t:c.t, value:cash+posValue });
+  }
+
+  // Open positie aan het einde tegen laatste prijs waarderen (niet verkopen)
+  const finalValue = equityCurve.length ? equityCurve[equityCurve.length-1].value : startCapital;
+  return { trades, equityCurve, finalValue, startCapital };
+}
+
+// ── Backtest uitvoeren (haalt candles op en draait de simulatie) ────
+async function runBacktest(){
+  if(btRunning) return;
+  const sym = document.getElementById('bt-market').value;
+  const startCapital = parseFloat(document.getElementById('bt-capital').value) || 10000;
+
+  if(!window._bvConnected || !window._bvClient){
+    toast('⚠️ Verbind eerst Bitvavo om historische data op te halen','#ff4757');
+    return;
+  }
+  if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
+    toast(`${sym} wordt niet ondersteund door Bitvavo`,'#ff4757');
+    return;
+  }
+
+  btRunning = true;
+  const btn = document.getElementById('bt-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Historische data ophalen...';
+
+  try{
+    // Bereken hoeveel candles we nodig hebben voor de gekozen periode + interval
+    const candlesPerDay = { '15m':96, '1h':24, '4h':6 }[btInterval] || 24;
+    const limit = Math.min(1440, candlesPerDay * btPeriodDays); // Bitvavo max ~1440 per call
+    const candles = await window._bvClient.getCandles(sym, btInterval, limit);
+
+    if(!candles || candles.length < 30){
+      throw new Error('Niet genoeg historische data beschikbaar voor deze periode/interval');
+    }
+
+    btn.innerHTML = '<span class="spinner"></span> Simulatie draaien...';
+    await new Promise(r=>setTimeout(r, 50)); // UI even laten updaten
+
+    const result = simulateBacktest(candles, startCapital);
+    renderBacktestResults(result, sym, candles);
+  } catch(err){
+    toast('❌ Backtest mislukt: ' + err.message, '#ff4757');
+  } finally {
+    btRunning = false;
+    btn.disabled = false;
+    btn.innerHTML = '▶ Backtest uitvoeren';
+  }
+}
+
+function renderBacktestResults(result, sym, candles){
+  const { trades, equityCurve, finalValue, startCapital } = result;
+  const pnl = finalValue - startCapital;
+  const pct = (pnl/startCapital)*100;
+  const sellTrades = trades.filter(t=>t.pnl!=null);
+  const wins = sellTrades.filter(t=>t.pnl>0);
+  const losses = sellTrades.filter(t=>t.pnl<=0);
+  const winRate = sellTrades.length ? (wins.length/sellTrades.length)*100 : 0;
+  const totalFees = trades.reduce((a,t)=>a+(t.fee||0),0);
+  const avgWin = wins.length ? wins.reduce((a,t)=>a+t.pnl,0)/wins.length : 0;
+  const avgLoss = losses.length ? losses.reduce((a,t)=>a+t.pnl,0)/losses.length : 0;
+
+  // Buy & hold vergelijking — wat als je gewoon had gekocht en vastgehouden
+  const firstPrice = candles[0].c, lastPrice = candles[candles.length-1].c;
+  const buyHoldPct = ((lastPrice-firstPrice)/firstPrice)*100;
+
+  // Max drawdown berekenen
+  let peak = startCapital, maxDrawdown = 0;
+  equityCurve.forEach(p=>{
+    if(p.value > peak) peak = p.value;
+    const dd = ((peak-p.value)/peak)*100;
+    if(dd > maxDrawdown) maxDrawdown = dd;
+  });
+
+  document.getElementById('backtest-setup').style.display = 'none';
+  const resEl = document.getElementById('backtest-results');
+  resEl.style.display = 'block';
+
+  const periodLabel = `${btPeriodDays} dagen · ${btInterval} candles · ${sym}`;
+
+  resEl.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:0.8px">${periodLabel}</div>
+      <div style="font-size:32px;font-weight:800;color:${pnl>=0?'var(--green)':'var(--red)'};margin-top:6px">${pnl>=0?'+':''}€${fmt(pnl)}</div>
+      <div style="font-size:14px;color:${pnl>=0?'var(--green)':'var(--red)'};font-weight:600">${fmtPct(pct)} rendement</div>
+    </div>
+
+    <div style="background:var(--panel2);border-radius:10px;padding:8px;margin-bottom:14px">
+      <canvas id="bt-equity-chart" height="120" style="width:100%;display:block"></canvas>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:var(--panel2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--sub)">Win rate</div>
+        <div style="font-size:18px;font-weight:800;color:${winRate>=50?'var(--green)':'var(--amber)'}">${fmt(winRate,0)}%</div>
+        <div style="font-size:10px;color:var(--dim)">${wins.length}/${sellTrades.length} trades</div>
+      </div>
+      <div style="background:var(--panel2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--sub)">vs. Buy & Hold</div>
+        <div style="font-size:18px;font-weight:800;color:${pct>=buyHoldPct?'var(--green)':'var(--red)'}">${pct>=buyHoldPct?'+':''}${fmt(pct-buyHoldPct,1)}%</div>
+        <div style="font-size:10px;color:var(--dim)">buy&hold: ${fmtPct(buyHoldPct)}</div>
+      </div>
+      <div style="background:var(--panel2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--sub)">Max drawdown</div>
+        <div style="font-size:18px;font-weight:800;color:var(--red)">-${fmt(maxDrawdown,1)}%</div>
+      </div>
+      <div style="background:var(--panel2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--sub)">Totale fees</div>
+        <div style="font-size:18px;font-weight:800;color:var(--amber)">€${fmt(totalFees)}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin:0 0 14px;padding:14px">
+      <div class="card-title">Trade statistieken</div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--sub)">Aantal trades</span><span style="font-weight:600">${trades.length}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--sub)">Gem. winst per trade</span><span style="font-weight:600;color:var(--green)">+€${fmt(avgWin)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--sub)">Gem. verlies per trade</span><span style="font-weight:600;color:var(--red)">€${fmt(avgLoss)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+        <span style="color:var(--sub)">Eindwaarde</span><span style="font-weight:600">€${fmt(finalValue)}</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin:0 0 14px;padding:14px">
+      <div class="card-title">Laatste trades (max. 15)</div>
+      <div style="max-height:200px;overflow-y:auto">
+        ${trades.slice(-15).reverse().map(t=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+            <div>
+              <span style="font-weight:700;color:${t.side==='BUY'?'var(--green)':'var(--red)'}">${t.side}</span>
+              <span style="color:var(--sub);margin-left:6px">${new Date(t.t).toLocaleDateString('nl-NL')}</span>
+            </div>
+            <div style="text-align:right">
+              <div>€${fmt(t.price)}</div>
+              ${t.pnl!=null?`<div style="color:${t.pnl>=0?'var(--green)':'var(--red)'}">${t.pnl>=0?'+':''}€${fmt(t.pnl)}</div>`:`<div style="color:var(--dim)">${t.reason}</div>`}
+            </div>
+          </div>`).join('') || '<div style="color:var(--dim);font-size:13px">Geen trades uitgevoerd in deze periode</div>'}
+      </div>
+    </div>
+
+    <button onclick="document.getElementById('backtest-setup').style.display='block';document.getElementById('backtest-results').style.display='none';" 
+      style="width:100%;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--sub);font-weight:600;cursor:pointer;margin-bottom:8px">↺ Nieuwe backtest</button>
+  `;
+
+  drawEquityCurve(equityCurve, startCapital);
+}
+
+function drawEquityCurve(equityCurve, startCapital){
+  const canvas = document.getElementById('bt-equity-chart');
+  if(!canvas || !equityCurve.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 16, H = 120;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
+
+  const values = equityCurve.map(p=>p.value);
+  const minV = Math.min(...values, startCapital), maxV = Math.max(...values, startCapital);
+  const range = maxV-minV || 1;
+  const padT=10, padB=10, chartH=H-padT-padB;
+  const toY = v => padT + chartH - ((v-minV)/range)*chartH;
+  const stepX = W / (equityCurve.length-1 || 1);
+
+  // Startkapitaal-lijn (referentie)
+  const baseY = toY(startCapital);
+  ctx.strokeStyle = '#4a5568';
+  ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(0,baseY); ctx.lineTo(W,baseY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Equity curve
+  const finalUp = values[values.length-1] >= startCapital;
+  ctx.strokeStyle = finalUp ? '#00d68f' : '#ff4757';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  equityCurve.forEach((p,i)=>{
+    const x = i*stepX, y = toY(p.value);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // Vul onder de lijn
+  ctx.lineTo(W, H-padB); ctx.lineTo(0, H-padB); ctx.closePath();
+  ctx.fillStyle = finalUp ? '#00d68f15' : '#ff475715';
+  ctx.fill();
+}
+
 function setIndicator(ind){
   strategy.indicator=ind;
   ['RSI','MA','Pattern','Combined'].forEach(i=>{
@@ -1568,7 +2142,7 @@ function showPage(name,btn){
   if(name==='analyse')renderAnalyse();
   if(name==='bot')renderBot();
   if(name==='trades')renderTrades();
-  if(name==='patterns'){renderPatternsPage();renderMarketToggles();}
+  if(name==='patterns'){renderPatternsPage();renderMarketToggles();updateNotificationToggleUI();updateTrailingToggleUI();}
 }
 
 // ══════════════════════════════════════════════════════
@@ -1594,6 +2168,40 @@ function save(){
 // PWA
 // ══════════════════════════════════════════════════════
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ══════════════════════════════════════════════════════
+// NOTIFICATIES — buiten de app om
+// ══════════════════════════════════════════════════════
+// Vraagt toestemming voor systeemnotificaties en stuurt die via de
+// service worker, zodat je een melding krijgt zelfs als de PWA op de
+// achtergrond staat (scherm uit of andere app open).
+let notificationsEnabled = localStorage.getItem('tb_notifications') === '1';
+
+async function requestNotificationPermission(){
+  if(!('Notification' in window)){
+    toast('Notificaties worden niet ondersteund op dit toestel','#ff4757');
+    return false;
+  }
+  if(Notification.permission === 'granted'){
+    notificationsEnabled = true;
+    localStorage.setItem('tb_notifications','1');
+    return true;
+  }
+  const perm = await Notification.requestPermission();
+  notificationsEnabled = perm === 'granted';
+  localStorage.setItem('tb_notifications', notificationsEnabled ? '1' : '0');
+  if(notificationsEnabled) toast('🔔 Notificaties aangezet','var(--green)');
+  else toast('Notificaties geweigerd — kan altijd aan via telefooninstellingen','#ffaa00');
+  return notificationsEnabled;
+}
+
+function sendNotification(title, body, tag){
+  if(!notificationsEnabled) return;
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(reg => {
+    reg.active?.postMessage({ type:'TRADEBOT_NOTIFY', title, body, tag });
+  }).catch(()=>{});
+}
 
 // ══════════════════════════════════════════════════════
 // EVENTS
