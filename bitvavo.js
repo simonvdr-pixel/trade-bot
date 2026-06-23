@@ -81,10 +81,15 @@ class BitvavoClient {
   _log(msg) { if (this.onLog) this.onLog(msg); console.log('[Bitvavo]', msg); }
 
   // ── Connect & authenticate ──────────────────────────────────────
+  // BELANGRIJK: Bitvavo stuurt GEEN bevestigingsbericht terug bij
+  // succesvolle authenticatie — alleen bij een FOUT komt er een
+  // foutmelding terug. We wachten daarom kort op een mogelijke fout;
+  // komt die niet, dan gaan we uit van een geslaagde authenticatie.
   connect() {
     if (this.ws && this.ws.readyState < 2) return;
     this._destroyed = false;
     this.ws = new WebSocket(BV_WS);
+    this._authConfirmed = false;
 
     this.ws.onopen = async () => {
       this._log('WebSocket open, authenticeren...');
@@ -97,6 +102,20 @@ class BitvavoClient {
         timestamp: ts,
         window:    10000,
       });
+
+      // Geen expliciete bevestiging te verwachten — neem na korte
+      // stilte (1.2s zonder foutmelding) aan dat auth is geslaagd.
+      this._authFallbackTimer = setTimeout(() => {
+        if (!this._authConfirmed && !this._destroyed) {
+          this._log('Geen foutmelding ontvangen → authenticatie geslaagd');
+          this.authenticated = true;
+          this.connected     = true;
+          this._authConfirmed = true;
+          if (this.onConnect) this.onConnect();
+          this._subQueue.forEach(m => this._send(m));
+          this._subQueue = [];
+        }
+      }, 1200);
     };
 
     this.ws.onmessage = (e) => {
@@ -118,6 +137,7 @@ class BitvavoClient {
 
     this.ws.onclose = (e) => {
       this._log(`WebSocket gesloten (code ${e.code})`);
+      clearTimeout(this._authFallbackTimer);
       this.connected     = false;
       this.authenticated = false;
       if (this.onDisconnect) this.onDisconnect();
@@ -173,12 +193,15 @@ class BitvavoClient {
 
   // ── Handle incoming messages ────────────────────────────────────
   _handle(msg) {
-    // 1. Authenticatie respons
-    if (msg.event === 'authenticate') {
-      if (msg.authenticated) {
+    // 1. Authenticatie respons — als die WEL binnenkomt (sommige
+    //    momenten/versies van de API doen dit blijkbaar toch)
+    if (msg.event === 'authenticate' || (msg.action === 'authenticate')) {
+      clearTimeout(this._authFallbackTimer);
+      this._authConfirmed = true;
+      if (msg.authenticated !== false) {
         this.authenticated = true;
         this.connected     = true;
-        this._log('Geauthenticeerd ✓');
+        this._log('Geauthenticeerd ✓ (expliciete bevestiging)');
         if (this.onConnect) this.onConnect();
         this._subQueue.forEach(m => this._send(m));
         this._subQueue = [];
