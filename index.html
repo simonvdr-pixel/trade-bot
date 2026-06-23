@@ -1198,10 +1198,13 @@ function renderBot(){
   const winTrades=trades.filter(t=>(t.pnl||0)>0);
   const loseTrades=trades.filter(t=>(t.pnl||0)<0&&t.pnl!=null);
   const totalPnl=trades.filter(t=>t.pnl!=null).reduce((a,t)=>a+(t.pnl||0),0);
+  // Totaal geïnvesteerd bedrag = som van qty × entryPrice over alle open posities
+  const totalInvested = Object.values(openPositions).reduce((a,p)=>a+(p.qty*p.entryPrice),0);
   const ps=document.getElementById('paper-stats');
   if(ps) ps.innerHTML=[
     ['Portfolio waarde', `€${fmt(tv)}`, tv>=capital?'var(--green)':'var(--red)'],
     ['Totaal P&L', `${pnl>=0?'+':''}€${fmt(pnl)} (${fmtPct(pct)})`, pnl>=0?'var(--green)':'var(--red)'],
+    ['💶 Totaal geïnvesteerd', `€${fmt(totalInvested)}`, 'var(--blue)'],
     ['Cash beschikbaar', `€${fmt(cash)}`, 'var(--text)'],
     ['Winstgevende trades', `${winTrades.length}`, 'var(--green)'],
     ['Verliesgevende trades', `${loseTrades.length}`, 'var(--red)'],
@@ -1232,17 +1235,22 @@ function renderBot(){
         entryPrice = posSource[sym].entryPrice;
         hasEntry = true;
       }
-      const pnl2 = hasEntry ? (price-entryPrice)*qty : null;
+      const invested = hasEntry ? qty*entryPrice : null; // geïnvesteerd bedrag in €
+      const currentValue = qty*price;
+      const pnl2 = hasEntry ? (currentValue-invested) : null;
       const pct2 = hasEntry ? ((price-entryPrice)/entryPrice)*100 : null;
       return`<div class="pos-row">
         <div><div style="font-weight:700;font-size:14px">${sym}</div>
-        <div style="font-size:11px;color:var(--sub)">${fmt(qty,6)}${hasEntry?` @ €${fmt(entryPrice)}`:' (bezit buiten bot)'}</div></div>
+        <div style="font-size:11px;color:var(--sub)">${fmt(qty,6)}${hasEntry?` @ €${fmt(entryPrice)}`:' (bezit buiten bot)'}</div>
+        ${hasEntry?`<div style="font-size:11px;color:var(--blue);margin-top:1px">💶 Ingelegd: €${fmt(invested)}</div>`:''}
+        </div>
         <div style="text-align:right">
           ${hasEntry?`
+            <div style="font-size:11px;color:var(--sub)">nu: €${fmt(currentValue)}</div>
             <div style="color:${pnl2>=0?'var(--green)':'var(--red)'};font-weight:700">${pnl2>=0?'+':''}€${fmt(pnl2)}</div>
             <div style="font-size:11px;color:${pnl2>=0?'var(--green)':'var(--red)'}">${fmtPct(pct2)}</div>
           `:`
-            <div style="color:var(--text);font-weight:700">€${fmt(qty*price)}</div>
+            <div style="color:var(--text);font-weight:700">€${fmt(currentValue)}</div>
             <div style="font-size:11px;color:var(--dim)">huidige waarde</div>
           `}
         </div></div>`;
@@ -1262,11 +1270,18 @@ function renderTrades(){
   if(st)st.textContent=total>0?`${wins}/${total} winstgevend`:'';
   if(!el)return;
   el.innerHTML=trades.length===0?'<div style="color:var(--dim);font-size:13px">Nog geen trades.</div>':
-    trades.map(t=>`<div class="trade-row">
+    trades.map(t=>{
+      const totalEur = t.qty * t.price; // totaal bedrag van deze trade in €
+      return`<div class="trade-row">
       <div><div style="font-weight:700;font-size:13px">${t.sym}</div><div style="font-size:10px;color:var(--sub)">${t.ts} · ${t.reason}</div></div>
       <div style="text-align:center"><span style="color:${t.side==='BUY'?'var(--green)':'var(--red)'};font-weight:800;font-size:13px">${t.side}</span></div>
-      <div style="text-align:right"><div style="font-size:13px">€${fmt(t.price)}</div><div style="font-size:12px;color:${(t.pnl||0)>=0?'var(--green)':'var(--red)'}">${t.pnl!=null?(t.pnl>=0?'+':'')+'€'+fmt(t.pnl):'—'}</div></div>
-    </div>`).join('');
+      <div style="text-align:right">
+        <div style="font-size:13px">€${fmt(t.price)} <span style="color:var(--dim);font-size:10px">/coin</span></div>
+        <div style="font-size:12px;color:var(--blue);font-weight:600">${t.side==='BUY'?'💶 ':'totaal '}€${fmt(totalEur)}</div>
+        <div style="font-size:12px;color:${(t.pnl||0)>=0?'var(--green)':'var(--red)'}">${t.pnl!=null?(t.pnl>=0?'+':'')+'€'+fmt(t.pnl):'—'}</div>
+      </div>
+    </div>`;
+    }).join('');
 }
 
 // ══════════════════════════════════════════════════════
