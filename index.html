@@ -339,6 +339,31 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     </div>
   </div>
 
+  <!-- ATR-gebaseerde adaptieve stop-loss -->
+  <div class="card">
+    <div class="card-title">📊 Adaptieve stop-loss (ATR)</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--sub);max-width:75%">Past de stop-loss aan op de actuele volatiliteit, in plaats van een vast percentage. Strakker in rustige markten, ruimer bij hoge volatiliteit.</div>
+      <div onclick="toggleSetting('atrStopEnabled','atr-toggle')" id="atr-toggle" class="feature-toggle">
+        <div class="feature-toggle-dot" id="atr-toggle-dot"></div>
+      </div>
+    </div>
+    <div id="atr-settings" style="display:none">
+      <div class="setting-row">
+        <div class="setting-label"><span>ATR-multiplier</span><span id="lbl-atrmult">2.5x</span></div>
+        <input type="range" min="1" max="5" step="0.1" value="2.5" oninput="document.getElementById('lbl-atrmult').textContent=this.value+'x';strategy.atrMultiplier=+this.value"/>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label"><span>Min. stop-loss</span><span id="lbl-atrmin">2%</span></div>
+        <input type="range" min="1" max="10" value="2" oninput="document.getElementById('lbl-atrmin').textContent=this.value+'%';strategy.atrMinStopPct=+this.value"/>
+      </div>
+      <div class="setting-row" style="margin-bottom:0">
+        <div class="setting-label"><span>Max. stop-loss</span><span id="lbl-atrmax">15%</span></div>
+        <input type="range" min="5" max="30" value="15" oninput="document.getElementById('lbl-atrmax').textContent=this.value+'%';strategy.atrMaxStopPct=+this.value"/>
+      </div>
+    </div>
+  </div>
+
   <!-- Fees & Slippage -->
   <div class="card">
     <div class="card-title">💸 Fees & Slippage (Bitvavo)</div>
@@ -591,9 +616,15 @@ input[type=range]{width:100%;accent-color:var(--blue)}
 
     <button onclick="runBacktest()" id="bt-run-btn" style="width:100%;padding:14px;background:var(--purple);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px">▶ Backtest uitvoeren</button>
 
-    <button onclick="runOptimization()" id="bt-optimize-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#ff6b00,#ff9500);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer">🔬 Automatisch optimaliseren</button>
-    <div style="font-size:11px;color:var(--sub);margin-top:8px;text-align:center">Test tientallen combinaties op deze periode en past je instellingen automatisch aan naar de beste.</div>
+    <button onclick="runOptimization()" id="bt-optimize-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#ff6b00,#ff9500);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px">🔬 Optimaliseren (train/test)</button>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:12px;text-align:center">Eén keer splitsen in train/test — snel, maar minder robuust tegen toeval.</div>
+
+    <button onclick="runWalkForward()" id="bt-walkforward-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#7c3aed,#a855f7);border:none;border-radius:12px;color:#fff;font-weight:800;font-size:15px;cursor:pointer">🚶 Walk-forward optimaliseren</button>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px;text-align:center">Schuift door meerdere periodes en houdt alleen instellingen aan die <b>consistent</b> blijven werken — duurt langer, maar het meest betrouwbaar tegen overfitting.</div>
   </div>
+
+  <!-- Walk-forward resultaten -->
+  <div id="walkforward-results" style="display:none"></div>
 
   <!-- Optimalisatie-resultaten -->
   <div id="optimize-results" style="display:none"></div>
@@ -870,7 +901,28 @@ let strategy={
   // ── Tijd-gebaseerde exit ─────────────────────────────────────────
   maxHoldHoursEnabled:false,
   maxHoldHours:48,
+  // ── ATR-gebaseerde adaptieve stop-loss ───────────────────────────
+  // Past de stop-loss automatisch aan de actuele volatiliteit aan,
+  // i.p.v. een vast percentage te gebruiken. Bij hoge volatiliteit
+  // (bv. net na nieuws) wordt de stop ruimer; bij lage volatiliteit
+  // strakker — voorkomt zowel voortijdig uitstappen in rustige
+  // periodes als te late stops in woeste periodes.
+  atrStopEnabled:false,
+  atrMultiplier:2.5,             // stop-loss = ATR% × deze factor
+  atrMinStopPct:2,               // ondergrens, ook bij zeer lage volatiliteit
+  atrMaxStopPct:15,              // bovengrens, ook bij extreme volatiliteit
 };
+
+// Berekent de daadwerkelijk te gebruiken stop-loss voor een coin: als
+// ATR-stop aan staat, gebruikt dit de actuele volatiliteit; anders het
+// vaste percentage uit de (effectieve) strategie.
+function getEffectiveStopLoss(candleArr, s){
+  if(!s.atrStopEnabled) return s.stopLoss;
+  const atrResult = calculateATR(candleArr, 14);
+  if(!atrResult) return s.stopLoss; // niet genoeg data — val terug op vast percentage
+  const adaptiveStop = atrResult.atrPct * s.atrMultiplier;
+  return Math.min(s.atrMaxStopPct, Math.max(s.atrMinStopPct, adaptiveStop));
+}
 
 // ══════════════════════════════════════════════════════
 // PER-COIN STRATEGIE-OVERRIDES
@@ -892,6 +944,7 @@ const PER_COIN_KEYS = [
   'mtfConfirmationEnabled','mtfTimeframe','volumeFilterEnabled','volumeMinRatio',
   'regimeDetectionEnabled','dynamicSizingEnabled','minPositionSizeMult',
   'maxPositionSizeMult','maxHoldHoursEnabled','maxHoldHours',
+  'atrStopEnabled','atrMultiplier','atrMinStopPct','atrMaxStopPct',
 ];
 
 // Combineert de globale strategy met de per-coin override (indien
@@ -1126,11 +1179,14 @@ function getVolumeRatio(candleArr, lookback=20){
 // duidelijke richting). RSI/MA-achtige indicatoren werken beter in
 // ranges; trend-volgende signalen (zoals MA-crossover) werken beter
 // in trends.
-function detectMarketRegime(candleArr){
-  if(!candleArr || candleArr.length < 20) return 'unknown';
-
-  const recent = candleArr.slice(-20);
-  // Gemiddelde true range als volatiliteitsmaat
+// ── ATR (Average True Range) — herbruikbare volatiliteitsmaat ──────
+// Wordt gebruikt door zowel market regime detectie als de adaptieve
+// stop-loss. Geeft zowel de absolute ATR als ATR-percentage terug
+// (ATR% is beter vergelijkbaar tussen coins met heel verschillende
+// prijsniveaus, bv. BTC op €60.000 vs. een altcoin op €0,02).
+function calculateATR(candleArr, period=14){
+  if(!candleArr || candleArr.length < period+1) return null;
+  const recent = candleArr.slice(-(period+1));
   let trSum = 0;
   for(let i=1;i<recent.length;i++){
     const c=recent[i], p=recent[i-1];
@@ -1138,8 +1194,16 @@ function detectMarketRegime(candleArr){
     trSum += tr;
   }
   const atr = trSum/(recent.length-1);
-  const avgPrice = recent.reduce((a,c)=>a+c.c,0)/recent.length;
-  const atrPct = avgPrice>0 ? (atr/avgPrice)*100 : 0;
+  const lastClose = recent[recent.length-1].c;
+  const atrPct = lastClose>0 ? (atr/lastClose)*100 : 0;
+  return { atr, atrPct };
+}
+
+function detectMarketRegime(candleArr){
+  if(!candleArr || candleArr.length < 20) return 'unknown';
+
+  const recent = candleArr.slice(-20);
+  const atrResult = calculateATR(candleArr, 19); // zelfde 20-candle venster
 
   // Richting: hoeveel van de totale prijsbeweging is "netto" verplaatsing
   // t.o.v. de som van alle absolute candle-bewegingen (efficiency ratio)
@@ -1547,6 +1611,7 @@ function runBot(){
       // toevallig in cooldown staat na een eerdere fout — je wilt
       // nooit dat een verlies-beperkende verkoop wordt tegengehouden.
       const pct=((price-pos.entryPrice)/pos.entryPrice)*100;
+      const effectiveStopLoss = getEffectiveStopLoss(candles[sym]||[], es);
 
       if(es.trailingStopEnabled){
         const hwm = trailingHighWaterMark[sym] || pos.entryPrice;
@@ -1556,7 +1621,7 @@ function runBot(){
           return;
         }
       }
-      if(pct<=-es.stopLoss){executeSell(sym,price,pos,'Stop-Loss');return;}
+      if(pct<=-effectiveStopLoss){executeSell(sym,price,pos,es.atrStopEnabled?`Stop-Loss (ATR ${fmt(effectiveStopLoss,1)}%)`:'Stop-Loss');return;}
       else if(pct>=es.takeProfit){executeSell(sym,price,pos,'Take-Profit');return;}
 
       // ── Tijd-gebaseerde exit ──────────────────────────────────────
@@ -2269,6 +2334,7 @@ const FEATURE_SETTINGS_MAP = {
   'mtf-toggle':'mtf-settings', 'vol-toggle':'vol-settings',
   'corr-toggle':'corr-settings', 'sizing-toggle':'sizing-settings',
   'hold-toggle':'hold-settings', 'regime-toggle':null,
+  'atr-toggle':'atr-settings',
 };
 function toggleSetting(strategyKey, toggleId){
   strategy[strategyKey] = !strategy[strategyKey];
@@ -2296,6 +2362,7 @@ function initAllFeatureToggles(){
   updateFeatureToggleUI('corr-toggle','correlationLimitEnabled');
   updateFeatureToggleUI('sizing-toggle','dynamicSizingEnabled');
   updateFeatureToggleUI('hold-toggle','maxHoldHoursEnabled');
+  updateFeatureToggleUI('atr-toggle','atrStopEnabled');
 }
 function setMtfTimeframe(tf){
   strategy.mtfTimeframe = tf;
@@ -2342,6 +2409,8 @@ function openBacktest(){
 
   document.getElementById('backtest-setup').style.display = 'block';
   document.getElementById('backtest-results').style.display = 'none';
+  document.getElementById('optimize-results').style.display = 'none';
+  document.getElementById('walkforward-results').style.display = 'none';
   document.getElementById('backtest-overlay').style.display = 'flex';
 }
 
@@ -2478,12 +2547,13 @@ function simulateBacktest(candles, startCapital, htfCandles, s){
 
       const pct = ((price-position.entryPrice)/position.entryPrice)*100;
       let exitReason = null;
+      const effectiveStopLoss = getEffectiveStopLoss(candlesSoFar, s);
 
       if(s.trailingStopEnabled){
         const trailPct = ((price-position.hwm)/position.hwm)*100;
         if(trailPct <= -s.trailingStopPct) exitReason = 'Trailing Stop';
       }
-      if(!exitReason && pct <= -s.stopLoss) exitReason = 'Stop-Loss';
+      if(!exitReason && pct <= -effectiveStopLoss) exitReason = s.atrStopEnabled ? 'Stop-Loss (ATR)' : 'Stop-Loss';
       else if(!exitReason && pct >= s.takeProfit) exitReason = 'Take-Profit';
 
       // Tijd-gebaseerde exit — zelfde logica als de live bot
@@ -2554,16 +2624,17 @@ let originalStrategySnapshot = null; // strategy-staat vóór optimalisatie, voo
 
 // Het te doorzoeken parameter-grid. Bewust beperkt tot de instellingen
 // met de meeste invloed op rendement, om de zoekruimte haalbaar te
-// houden in de browser (vooral op mobiel) — dit grid geeft 972
-// combinaties, wat op de meeste telefoons binnen 10-20 seconden klaar is.
+// houden in de browser (vooral op mobiel) — dit grid geeft ruim 1300
+// combinaties, wat op de meeste telefoons binnen 15-25 seconden klaar is.
 const OPTIMIZATION_GRID = {
   indicator:      ['RSI','MA','Combined'],
   rsiOversold:    [25, 30, 35],
   rsiOverbought:  [65, 70, 75],
-  stopLoss:       [3, 5, 8],
+  stopLoss:       [4, 7],
   takeProfit:     [8, 12, 18],
   positionSize:   [10, 20],
   trailingStopEnabled: [false, true],
+  atrStopEnabled: [false, true],
 };
 
 function generateCombinations(grid){
@@ -2602,6 +2673,37 @@ function scoreResult(result, startCapital){
   return { score, pct, maxDD, tradeCount: sellTrades.length };
 }
 
+// ── Train/test-split tegen overfitting ──────────────────────────────
+// Optimaliseren op de volledige periode en daarna zien dat het werkte
+// bewijst niets — een combinatie kan toevallig precies passen bij wat
+// er al gebeurd is. Door de periode te splitsen in een 'train'-deel
+// (waarop we zoeken) en een 'test'-deel (waarop we alleen meten, niet
+// optimaliseren), filteren we combinaties die alleen op het verleden
+// werkten. De einscore combineert beide; een combinatie die op train
+// goed scoort maar op test instort, wordt zwaar afgestraft.
+const TRAIN_SPLIT_RATIO = 0.7; // 70% train, 30% test
+
+function splitCandlesForValidation(candles){
+  const splitIdx = Math.floor(candles.length * TRAIN_SPLIT_RATIO);
+  return {
+    train: candles.slice(0, splitIdx),
+    test: candles.slice(splitIdx), // candles.slice geeft GEEN overlap — geen look-ahead
+  };
+}
+
+// Combineert train- en test-score tot één getal. Een combinatie die
+// op test slechter presteert dan op train (overfitting-signaal) wordt
+// extra afgestraft via de 'consistency penalty'.
+function combinedTrainTestScore(trainScored, testScored){
+  // Test-resultaat telt zwaarder, want dat is de eerlijke validatie
+  const weighted = (trainScored.score * 0.35) + (testScored.score * 0.65);
+  // Straf voor inconsistentie: als train veel beter scoort dan test,
+  // is dat een teken dat de combinatie is "gefit" op het trainstuk
+  const gap = trainScored.score - testScored.score;
+  const consistencyPenalty = gap > 0 ? gap * 0.3 : 0;
+  return weighted - consistencyPenalty;
+}
+
 async function runOptimization(){
   if(optimizationRunning) return;
   const sym = document.getElementById('bt-market').value;
@@ -2633,8 +2735,8 @@ async function runOptimization(){
     const candlesPerDay = { '15m':96, '1h':24, '4h':6 }[btInterval] || 24;
     const limit = Math.min(1440, candlesPerDay * btPeriodDays);
     const candles = await window._bvClient.getCandles(sym, btInterval, limit);
-    if(!candles || candles.length < 30){
-      throw new Error('Niet genoeg historische data beschikbaar voor deze periode/interval');
+    if(!candles || candles.length < 50){
+      throw new Error('Niet genoeg historische data voor train/test-splitsing — kies een langere periode');
     }
 
     let htfForOpt = null;
@@ -2646,34 +2748,62 @@ async function runOptimization(){
       } catch(err){ /* zonder HTF verder gaan is acceptabel hier */ }
     }
 
+    // Splits de candles: optimaliseren gebeurt op 'train', de
+    // uiteindelijke score wordt gevalideerd op het ongeziene 'test'-deel
+    const { train: trainCandles, test: testCandles } = splitCandlesForValidation(candles);
+    let htfTrain = null, htfTest = null;
+    if(htfForOpt && htfForOpt.length){
+      const trainEndTime = trainCandles[trainCandles.length-1].t;
+      htfTrain = htfForOpt.filter(c=>c.t <= trainEndTime);
+      htfTest = htfForOpt; // simulateBacktest filtert zelf al op tijdstip, geen look-ahead
+    }
+
     const combos = generateCombinations(OPTIMIZATION_GRID);
     const total = combos.length;
     let results = [];
 
-    btn.innerHTML = `<span class="spinner"></span> Combinatie 0/${total}...`;
+    btn.innerHTML = `<span class="spinner"></span> Combinatie 0/${total} (train+test)...`;
 
     // Combinaties in batches verwerken zodat de UI tussendoor kan
     // updaten (anders bevriest het scherm bij honderden simulaties).
-    // Elke combo wordt samengevoegd MET de baseStrategy (niet de
-    // globale strategy) — zo blijft de globale staat ongemoeid tijdens
-    // het zoeken en testen we steeds vanaf deze coin se eigen basis.
-    const BATCH_SIZE = 25;
+    // Elke combo draait NU TWEE simulaties: één op het train-deel
+    // (om te zoeken) en één op het test-deel (om te valideren of het
+    // niet toevalstreffer was).
+    const BATCH_SIZE = 15; // kleiner omdat elke combo nu 2x zo veel werk is
     for(let i=0; i<combos.length; i+=BATCH_SIZE){
       const batch = combos.slice(i, i+BATCH_SIZE);
       batch.forEach(combo => {
         const testStrategy = { ...baseStrategy, ...combo };
-        const result = simulateBacktest(candles, startCapital, htfForOpt, testStrategy);
-        const scored = scoreResult(result, startCapital);
-        results.push({ combo, ...scored });
+        const trainResult = simulateBacktest(trainCandles, startCapital, htfTrain, testStrategy);
+        const testResult = simulateBacktest(testCandles, startCapital, htfTest, testStrategy);
+        const trainScored = scoreResult(trainResult, startCapital);
+        const testScored = scoreResult(testResult, startCapital);
+        const combinedScore = combinedTrainTestScore(trainScored, testScored);
+        results.push({
+          combo, score: combinedScore,
+          pct: testScored.pct, maxDD: testScored.maxDD, tradeCount: testScored.tradeCount,
+          trainPct: trainScored.pct, testPct: testScored.pct,
+        });
       });
-      btn.innerHTML = `<span class="spinner"></span> Combinatie ${Math.min(i+BATCH_SIZE,total)}/${total}...`;
+      btn.innerHTML = `<span class="spinner"></span> Combinatie ${Math.min(i+BATCH_SIZE,total)}/${total} (train+test)...`;
       await new Promise(r=>setTimeout(r, 0)); // UI-thread even laten ademen
     }
 
-    // Sorteer op score, beste eerst
+    // Sorteer op gecombineerde score, beste eerst
     results.sort((a,b)=>b.score-a.score);
     const best = results[0];
-    const baseline = scoreResult(simulateBacktest(candles, startCapital, htfForOpt, baseStrategy), startCapital);
+
+    // Baseline: de instellingen die je al had, ook gevalideerd op
+    // hetzelfde train/test-stuk voor een eerlijke vergelijking
+    const baselineTrainResult = simulateBacktest(trainCandles, startCapital, htfTrain, baseStrategy);
+    const baselineTestResult = simulateBacktest(testCandles, startCapital, htfTest, baseStrategy);
+    const baselineTrainScored = scoreResult(baselineTrainResult, startCapital);
+    const baselineTestScored = scoreResult(baselineTestResult, startCapital);
+    const baseline = {
+      score: combinedTrainTestScore(baselineTrainScored, baselineTestScored),
+      pct: baselineTestScored.pct, maxDD: baselineTestScored.maxDD, tradeCount: baselineTestScored.tradeCount,
+      trainPct: baselineTrainScored.pct, testPct: baselineTestScored.pct,
+    };
 
     renderOptimizationResults(results.slice(0,10), best, baseline, sym, candles, startCapital, htfForOpt);
   } catch(err){
@@ -2685,24 +2815,292 @@ async function runOptimization(){
   }
 }
 
+// ══════════════════════════════════════════════════════
+// WALK-FORWARD OPTIMALISATIE
+// ══════════════════════════════════════════════════════
+// De meest robuuste manier om overfitting te voorkomen: in plaats van
+// één keer te optimaliseren en één keer te valideren, schuiven we door
+// meerdere opeenvolgende vensters. Voor elk venster optimaliseren we
+// op het venster zelf en testen we de winnaar op het DAAROPVOLGENDE,
+// nog ongeziene venster. Een combinatie die alleen toevallig goed
+// scoorde op één periode zal niet consistent winnen over meerdere
+// vensters — wat wél consistent wint, is waarschijnlijk een echt
+// patroon en geen toeval.
+let walkForwardRunning = false;
+const WALK_FORWARD_WINDOWS = 4; // aantal opeenvolgende periodes
+
+function splitIntoWindows(candles, n){
+  const windowSize = Math.floor(candles.length / n);
+  const windows = [];
+  for(let i=0; i<n; i++){
+    const start = i*windowSize;
+    const end = i===n-1 ? candles.length : start+windowSize; // laatste venster pakt de rest
+    windows.push(candles.slice(start, end));
+  }
+  return windows;
+}
+
+async function runWalkForward(){
+  if(walkForwardRunning) return;
+  const sym = document.getElementById('bt-market').value;
+  const startCapital = parseFloat(document.getElementById('bt-capital').value) || 10000;
+
+  if(!window._bvConnected || !window._bvClient){
+    toast('⚠️ Verbind eerst Bitvavo om historische data op te halen','#ff4757');
+    return;
+  }
+  if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
+    toast(`${sym} wordt niet ondersteund door Bitvavo`,'#ff4757');
+    return;
+  }
+
+  walkForwardRunning = true;
+  const btn = document.getElementById('bt-walkforward-btn');
+  const otherBtns = [document.getElementById('bt-run-btn'), document.getElementById('bt-optimize-btn')];
+  btn.disabled = true; otherBtns.forEach(b=>b.disabled=true);
+  btn.innerHTML = '<span class="spinner"></span> Historische data ophalen...';
+
+  const baseStrategy = { ...getEffectiveStrategy(sym) };
+  originalStrategySnapshot = baseStrategy;
+
+  try{
+    // Walk-forward heeft meer data nodig dan een gewone backtest —
+    // we hebben WALK_FORWARD_WINDOWS+1 aparte stukken nodig die elk
+    // nog genoeg candles hebben voor een betrouwbare simulatie (min.
+    // ~50 candles per venster voor MA50/RSI).
+    const candlesPerDay = { '15m':96, '1h':24, '4h':6 }[btInterval] || 24;
+    const limit = Math.min(1440, candlesPerDay * btPeriodDays);
+    const candles = await window._bvClient.getCandles(sym, btInterval, limit);
+    const minNeeded = (WALK_FORWARD_WINDOWS+1) * 50;
+    if(!candles || candles.length < minNeeded){
+      throw new Error(`Niet genoeg data voor walk-forward — kies een langere periode (minimaal ${minNeeded} candles nodig, nu ${candles?.length||0})`);
+    }
+
+    let htfFull = null;
+    if(baseStrategy.mtfConfirmationEnabled){
+      try{
+        const htfCandlesPerDay = { '15m':96,'1h':24,'4h':6,'1d':1 }[baseStrategy.mtfTimeframe] || 24;
+        const htfLimit = Math.min(1440, Math.max(60, htfCandlesPerDay*btPeriodDays + 50));
+        htfFull = await window._bvClient.getCandles(sym, baseStrategy.mtfTimeframe, htfLimit);
+      } catch(err){ /* zonder HTF verder gaan is acceptabel */ }
+    }
+
+    // Combineer ALLE vensters tot N+1 stukken: venster 0 optimaliseert
+    // → test op venster 1; venster 1 optimaliseert → test op venster 2; enz.
+    const windows = splitIntoWindows(candles, WALK_FORWARD_WINDOWS+1);
+    const combos = generateCombinations(OPTIMIZATION_GRID);
+    const stepResults = []; // per stap: { windowIdx, bestCombo, trainScore, testScore }
+    const comboWinCounts = {}; // hoe vaak elke combo de beste was op een train-stap
+    const comboTestScores = {}; // gemiddelde test-score per combo over alle stappen
+
+    const totalSteps = WALK_FORWARD_WINDOWS;
+    for(let step=0; step<totalSteps; step++){
+      const trainWindow = windows[step];
+      const testWindow = windows[step+1];
+      if(!trainWindow.length || !testWindow.length) continue;
+
+      btn.innerHTML = `<span class="spinner"></span> Periode ${step+1}/${totalSteps} optimaliseren...`;
+      await new Promise(r=>setTimeout(r, 0));
+
+      let htfTrain = null;
+      if(htfFull && htfFull.length){
+        const trainEndTime = trainWindow[trainWindow.length-1].t;
+        htfTrain = htfFull.filter(c=>c.t <= trainEndTime);
+      }
+
+      // Optimaliseer op dit venster
+      let stepResults_local = [];
+      const BATCH_SIZE = 25;
+      for(let i=0; i<combos.length; i+=BATCH_SIZE){
+        const batch = combos.slice(i, i+BATCH_SIZE);
+        batch.forEach(combo => {
+          const testStrategy = { ...baseStrategy, ...combo };
+          const result = simulateBacktest(trainWindow, startCapital, htfTrain, testStrategy);
+          const scored = scoreResult(result, startCapital);
+          stepResults_local.push({ combo, ...scored });
+        });
+        if(i % (BATCH_SIZE*4) === 0) await new Promise(r=>setTimeout(r, 0));
+      }
+      stepResults_local.sort((a,b)=>b.score-a.score);
+      const stepBest = stepResults_local[0];
+
+      // Test de winnaar van dit venster op het VOLGENDE, ongeziene venster
+      let htfTest = htfFull; // simulateBacktest filtert zelf op tijdstip
+      const testStrategy = { ...baseStrategy, ...stepBest.combo };
+      const testResult = simulateBacktest(testWindow, startCapital, htfTest, testStrategy);
+      const testScored = scoreResult(testResult, startCapital);
+
+      stepResults.push({
+        windowIdx: step, combo: stepBest.combo,
+        trainScore: stepBest.score, trainPct: stepBest.pct,
+        testScore: testScored.score, testPct: testScored.pct, testTradeCount: testScored.tradeCount,
+      });
+
+      // Houd bij welke combinaties vaker winnen en hoe ze gemiddeld
+      // presteren op ongeziene data — dit bepaalt de uiteindelijke
+      // aanbeveling, niet één enkele beste run.
+      const comboKey = JSON.stringify(stepBest.combo);
+      comboWinCounts[comboKey] = (comboWinCounts[comboKey]||0) + 1;
+      if(!comboTestScores[comboKey]) comboTestScores[comboKey] = [];
+      comboTestScores[comboKey].push(testScored.score);
+    }
+
+    if(stepResults.length === 0){
+      throw new Error('Geen enkele periode kon succesvol getest worden');
+    }
+
+    // Bepaal de meest consistente combinatie: degene die het vaakst
+    // won EN gemiddeld het beste (of minst slecht) presteerde op de
+    // ongeziene test-vensters.
+    let bestComboKey = null, bestAvgScore = -Infinity;
+    Object.entries(comboTestScores).forEach(([key, scores])=>{
+      const avg = scores.reduce((a,b)=>a+b,0)/scores.length;
+      // Beloon ook consistentie: een combinatie die op meerdere
+      // vensters won, is betrouwbaarder dan een eenmalige uitschieter
+      const winBonus = (comboWinCounts[key]-1) * 2; // bonus per extra keer gewonnen
+      const finalScore = avg + winBonus;
+      if(finalScore > bestAvgScore){
+        bestAvgScore = finalScore;
+        bestComboKey = key;
+      }
+    });
+    const recommendedCombo = JSON.parse(bestComboKey);
+
+    // Baseline: hoe had de HUIDIGE strategie het gedaan op elk
+    // test-venster, voor een eerlijke vergelijking
+    let baselineScores = [];
+    for(let step=0; step<totalSteps; step++){
+      const testWindow = windows[step+1];
+      if(!testWindow.length) continue;
+      const result = simulateBacktest(testWindow, startCapital, htfFull, baseStrategy);
+      baselineScores.push(scoreResult(result, startCapital).pct);
+    }
+    const baselineAvgPct = baselineScores.length ? baselineScores.reduce((a,b)=>a+b,0)/baselineScores.length : 0;
+
+    renderWalkForwardResults(stepResults, recommendedCombo, comboWinCounts, baselineAvgPct, sym, totalSteps);
+  } catch(err){
+    toast('❌ Walk-forward mislukt: ' + err.message, '#ff4757');
+  } finally {
+    walkForwardRunning = false;
+    btn.disabled = false; otherBtns.forEach(b=>b.disabled=false);
+    btn.innerHTML = '🚶 Walk-forward optimaliseren';
+  }
+}
+
+function renderWalkForwardResults(stepResults, recommendedCombo, comboWinCounts, baselineAvgPct, sym, totalSteps){
+  document.getElementById('backtest-setup').style.display = 'none';
+  document.getElementById('backtest-results').style.display = 'none';
+  document.getElementById('optimize-results').style.display = 'none';
+  const el = document.getElementById('walkforward-results');
+  el.style.display = 'block';
+
+  const avgTestPct = stepResults.reduce((a,s)=>a+s.testPct,0)/stepResults.length;
+  const recommendedKey = JSON.stringify(recommendedCombo);
+  const winCount = comboWinCounts[recommendedKey] || 0;
+  const consistencyPct = (winCount/totalSteps)*100;
+
+  const labels = {
+    indicator:'Indicator', rsiOversold:'RSI Oversold', rsiOverbought:'RSI Overbought',
+    stopLoss:'Stop-Loss', takeProfit:'Take-Profit', positionSize:'Positiegrootte',
+    trailingStopEnabled:'Trailing Stop', atrStopEnabled:'ATR-stop',
+  };
+
+  el.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:0.8px">🚶 Walk-forward · ${sym} · ${totalSteps} periodes</div>
+      <div style="font-size:13px;color:var(--sub);margin-top:8px">Gemiddeld rendement op ongeziene periodes</div>
+      <div style="font-size:32px;font-weight:800;color:${avgTestPct>=0?'var(--green)':'var(--red)'};margin-top:4px">${avgTestPct>=0?'+':''}${fmt(avgTestPct,1)}%</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px">vs. ${baselineAvgPct>=0?'+':''}${fmt(baselineAvgPct,1)}% met je huidige instellingen op dezelfde periodes</div>
+    </div>
+
+    <div class="card" style="margin:0 0 14px;padding:14px;border-color:var(--purple)44">
+      <div class="card-title">🏆 Meest consistente strategie</div>
+      <div style="background:${consistencyPct>=50?'var(--green)15':'var(--amber)15'};border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:${consistencyPct>=50?'var(--green)':'var(--amber)'}">Won op ${winCount}/${totalSteps} periodes (${fmt(consistencyPct,0)}%)</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">${consistencyPct>=50?'Deze instellingen werkten op de meerderheid van de geteste periodes — een goed teken.':'Deze instellingen wonnen niet vaak, maar waren de minst slechte over alle periodes — wees extra voorzichtig.'}</div>
+      </div>
+      ${Object.entries(recommendedCombo).map(([k,v])=>{
+        const unit = ['rsiOversold','rsiOverbought','stopLoss','takeProfit','positionSize'].includes(k)?'%':'';
+        const disp = typeof v==='boolean' ? (v?'Aan':'Uit') : v+unit;
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+          <span style="color:var(--sub)">${labels[k]||k}</span><span style="font-weight:700">${disp}</span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="card" style="margin:0 0 14px;padding:14px">
+      <div class="card-title">Resultaat per periode</div>
+      <div style="font-size:11px;color:var(--sub);margin-bottom:10px">Elke periode optimaliseert op zijn eigen venster en wordt getest op het volgende, nog ongeziene venster.</div>
+      ${stepResults.map((s,i)=>{
+        const isWinner = JSON.stringify(s.combo)===recommendedKey;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+          <div>
+            <span style="font-weight:700">Periode ${i+1}→${i+2}</span>
+            ${isWinner?'<span style="font-size:9px;background:var(--purple)22;color:var(--purple);padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700">AANBEVOLEN</span>':''}
+            <div style="color:var(--sub);font-size:11px;margin-top:1px">${s.combo.indicator} · SL${s.combo.stopLoss}/TP${s.combo.takeProfit}${s.combo.atrStopEnabled?' · ATR':''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;color:${s.testPct>=0?'var(--green)':'var(--red)'}">${s.testPct>=0?'+':''}${fmt(s.testPct,1)}%</div>
+            <div style="font-size:10px;color:var(--dim)">test-resultaat</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <button onclick="applyWalkForwardResult('${sym}')" style="width:100%;padding:14px;background:var(--green);border:none;border-radius:12px;color:#000;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px">✓ Pas deze instellingen toe voor ${sym}</button>
+    <button onclick="discardWalkForwardResult()" style="width:100%;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--sub);font-weight:600;cursor:pointer;margin-bottom:8px">↺ Terug naar backtest</button>
+    <div style="font-size:11px;color:var(--sub);text-align:center;line-height:1.5">
+      🚶 Walk-forward is de meest robuuste validatiemethode die deze app biedt — maar zelfs dit is geen garantie. Markten veranderen; herhaal dit periodiek (bv. elke maand) om te checken of de instellingen nog passen.
+    </div>
+  `;
+
+  window._pendingWalkForward = { sym, combo: recommendedCombo };
+}
+
+function applyWalkForwardResult(sym){
+  if(!window._pendingWalkForward){ toast('Geen walk-forward resultaat beschikbaar','#ff4757'); return; }
+  setCoinOverride(sym, window._pendingWalkForward.combo);
+  renderCoinOverridesList();
+  toast(`✓ Walk-forward geoptimaliseerde strategie opgeslagen voor ${sym}!`, 'var(--green)');
+  closeBacktest();
+}
+function discardWalkForwardResult(){
+  window._pendingWalkForward = null;
+  document.getElementById('walkforward-results').style.display = 'none';
+  document.getElementById('backtest-setup').style.display = 'block';
+}
+
 function renderOptimizationResults(top10, best, baseline, sym, candles, startCapital, htfForOpt){
   document.getElementById('backtest-setup').style.display = 'none';
   document.getElementById('backtest-results').style.display = 'none';
+  document.getElementById('walkforward-results').style.display = 'none';
   const el = document.getElementById('optimize-results');
   el.style.display = 'block';
 
   const improvement = best.pct - baseline.pct;
-  const periodLabel = `${btPeriodDays} dagen · ${btInterval} candles · ${sym} · ${top10.length>0?Object.keys(OPTIMIZATION_GRID).reduce((a,k)=>a*OPTIMIZATION_GRID[k].length,1):0} combinaties getest`;
+  const totalCombos = Object.keys(OPTIMIZATION_GRID).reduce((a,k)=>a*OPTIMIZATION_GRID[k].length,1);
+  const periodLabel = `${btPeriodDays} dagen · ${btInterval} candles · ${sym} · ${totalCombos} combinaties getest`;
 
   el.innerHTML = `
     <div style="text-align:center;margin-bottom:16px">
       <div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:0.8px">${periodLabel}</div>
-      <div style="font-size:13px;color:var(--sub);margin-top:8px">Beste gevonden rendement</div>
+      <div style="font-size:13px;color:var(--sub);margin-top:8px">Rendement op het ongeziene test-deel (30%)</div>
       <div style="font-size:32px;font-weight:800;color:${best.pct>=0?'var(--green)':'var(--red)'};margin-top:4px">${best.pct>=0?'+':''}${fmt(best.pct,1)}%</div>
-      <div style="font-size:12px;color:var(--sub);margin-top:4px">vs. ${baseline.pct>=0?'+':''}${fmt(baseline.pct,1)}% met je huidige instellingen
-        ${improvement>0?`<span style="color:var(--green);font-weight:700"> (+${fmt(improvement,1)}% beter)</span>`:improvement<0?`<span style="color:var(--amber);font-weight:700"> (${fmt(improvement,1)}%, huidige was al beter op deze metric)</span>`:''}
+      <div style="font-size:12px;color:var(--sub);margin-top:4px">vs. ${baseline.pct>=0?'+':''}${fmt(baseline.pct,1)}% met je huidige instellingen op hetzelfde test-deel
+        ${improvement>0?`<span style="color:var(--green);font-weight:700"> (+${fmt(improvement,1)}% beter)</span>`:improvement<0?`<span style="color:var(--amber);font-weight:700"> (${fmt(improvement,1)}%, huidige was al beter)</span>`:''}
       </div>
     </div>
+
+    ${best.trainPct!=null?`
+    <div style="background:var(--panel2);border-radius:8px;padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;font-size:12px">
+      <span style="color:var(--sub)">Train-resultaat (70%, gebruikt om te zoeken)</span>
+      <span style="font-weight:700;color:${best.trainPct>=0?'var(--green)':'var(--red)'}">${best.trainPct>=0?'+':''}${fmt(best.trainPct,1)}%</span>
+    </div>
+    ${Math.abs(best.trainPct - best.testPct) > 15 ? `
+    <div style="background:var(--amber)15;border:1px solid var(--amber)33;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:var(--amber)">
+      ⚠️ Groot verschil tussen train (${fmt(best.trainPct,1)}%) en test (${fmt(best.testPct,1)}%) — mogelijk teken van overfitting. Overweeg de walk-forward optimalisatie voor een robuustere check.
+    </div>` : ''}
+    ` : ''}
 
     <div class="card" style="margin:0 0 14px;padding:14px;border-color:var(--amber)44">
       <div class="card-title">🏆 Winnende instellingen</div>
@@ -2710,7 +3108,7 @@ function renderOptimizationResults(top10, best, baseline, sym, candles, startCap
         const labels = {
           indicator:'Indicator', rsiOversold:'RSI Oversold', rsiOverbought:'RSI Overbought',
           stopLoss:'Stop-Loss', takeProfit:'Take-Profit', positionSize:'Positiegrootte',
-          trailingStopEnabled:'Trailing Stop'
+          trailingStopEnabled:'Trailing Stop', atrStopEnabled:'ATR-stop',
         };
         const unit = ['rsiOversold','rsiOverbought','stopLoss','takeProfit','positionSize'].includes(k) ? '%' : '';
         const displayVal = typeof v === 'boolean' ? (v?'Aan':'Uit') : v+unit;
@@ -2721,21 +3119,21 @@ function renderOptimizationResults(top10, best, baseline, sym, candles, startCap
         </div>`;
       }).join('')}
       <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;margin-top:4px">
-        <span style="color:var(--sub)">Max drawdown</span><span style="font-weight:700;color:var(--red)">-${fmt(best.maxDD,1)}%</span>
+        <span style="color:var(--sub)">Max drawdown (test)</span><span style="font-weight:700;color:var(--red)">-${fmt(best.maxDD,1)}%</span>
       </div>
       <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-        <span style="color:var(--sub)">Aantal trades</span><span style="font-weight:700">${best.tradeCount}</span>
+        <span style="color:var(--sub)">Aantal trades (test)</span><span style="font-weight:700">${best.tradeCount}</span>
       </div>
     </div>
 
     <div class="card" style="margin:0 0 14px;padding:14px">
-      <div class="card-title">Top 10 combinaties</div>
+      <div class="card-title">Top 10 combinaties (gesorteerd op test-resultaat)</div>
       <div style="max-height:240px;overflow-y:auto">
         ${top10.map((r,i)=>`
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-weight:800;color:${i===0?'var(--amber)':'var(--dim)'}">#${i+1}</span>
-              <span style="color:var(--sub)">${r.combo.indicator} · SL${r.combo.stopLoss}/TP${r.combo.takeProfit} · ${r.combo.positionSize}%${r.combo.trailingStopEnabled?' · trail':''}</span>
+              <span style="color:var(--sub)">${r.combo.indicator} · SL${r.combo.stopLoss}/TP${r.combo.takeProfit} · ${r.combo.positionSize}%${r.combo.trailingStopEnabled?' · trail':''}${r.combo.atrStopEnabled?' · ATR':''}</span>
             </div>
             <span style="font-weight:700;color:${r.pct>=0?'var(--green)':'var(--red)'}">${r.pct>=0?'+':''}${fmt(r.pct,1)}%</span>
           </div>`).join('')}
@@ -2745,7 +3143,7 @@ function renderOptimizationResults(top10, best, baseline, sym, candles, startCap
     <button onclick="applyOptimizationResult()" id="apply-optimization-btn" style="width:100%;padding:14px;background:var(--green);border:none;border-radius:12px;color:#000;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:8px">✓ Pas deze instellingen toe</button>
     <button onclick="discardOptimizationResult()" style="width:100%;padding:12px;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--sub);font-weight:600;cursor:pointer;margin-bottom:8px">↺ Terug naar backtest</button>
     <div style="font-size:11px;color:var(--sub);text-align:center;line-height:1.5">
-      ⚠️ Dit is geoptimaliseerd op <b>historische</b> data uit dezelfde periode — geen garantie voor toekomstige resultaten (overfitting-risico). Test de winnende instellingen het liefst ook op een andere periode vóór je live gaat.
+      ✓ Dit resultaat is gevalideerd op een ongezien test-deel (30% van de data, niet gebruikt om te zoeken) — robuuster dan een gewone backtest, maar voor de meest betrouwbare check raden we walk-forward optimalisatie aan.
     </div>
   `;
 
@@ -3028,6 +3426,8 @@ function renderBacktestResults(result, sym, candles){
   });
 
   document.getElementById('backtest-setup').style.display = 'none';
+  document.getElementById('optimize-results').style.display = 'none';
+  document.getElementById('walkforward-results').style.display = 'none';
   const resEl = document.getElementById('backtest-results');
   resEl.style.display = 'block';
 
