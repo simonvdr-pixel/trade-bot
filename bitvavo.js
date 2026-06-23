@@ -359,15 +359,61 @@ class BitvavoClient {
   // ORDERS (vereisen auth, alleen in live modus)
   // ══════════════════════════════════════════════════════════════
 
+  // ── Marktinfo ophalen (precisie per coin) — DE FIX voor decimalen ──
+  // Bitvavo heeft per markt een eigen 'quantityDecimals' instelling
+  // (vroeger ten onrechte 'amountPrecision' genoemd in deze code).
+  // We cachen dit zodat we niet steeds opnieuw moeten vragen.
+  async getMarketInfo(ourSymbol) {
+    const market = BV_SYMBOL_MAP[ourSymbol];
+    if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
+    if (!this._marketCache) this._marketCache = {};
+    if (this._marketCache[market]) return this._marketCache[market];
+
+    const res = await this._request('getMarkets', { market });
+    const data = Array.isArray(res) ? res[0] : res;
+    const info = {
+      // DE FIX: het juiste veld heet 'quantityDecimals', niet 'amountPrecision'
+      amountPrecision:  data?.quantityDecimals !== undefined ? parseInt(data.quantityDecimals) : 6,
+      pricePrecision:   data?.pricePrecision   !== undefined ? parseInt(data.pricePrecision)   : 5,
+      notionalDecimals: data?.notionalDecimals !== undefined ? parseInt(data.notionalDecimals) : 2,
+      minOrderInBaseAsset:  data?.minOrderInBaseAsset  || '0',
+      minOrderInQuoteAsset: data?.minOrderInQuoteAsset || '5',
+    };
+    this._marketCache[market] = info;
+    return info;
+  }
+
+  // Rond een hoeveelheid af naar het juiste aantal decimalen voor deze markt
+  _roundAmount(amount, precision) {
+    const factor = Math.pow(10, precision);
+    // Math.floor i.p.v. afronden, zodat we nooit MEER bezitten dan we afronden
+    // (voorkomt "insufficient balance" bij verkopen door afrondingsfouten)
+    return Math.floor(amount * factor) / factor;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ORDERS (vereisen auth, alleen in live modus)
+  // ══════════════════════════════════════════════════════════════
+
   async marketBuy(ourSymbol, amountInEur) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
     if (amountInEur < 5) throw new Error('Minimum ordergrootte is €5');
+
+    // notionalDecimals voor het EUR-bedrag opvragen (meestal 2, niet gegarandeerd)
+    let notionalDecimals = 2;
+    try {
+      const info = await this.getMarketInfo(ourSymbol);
+      notionalDecimals = info.notionalDecimals;
+    } catch {
+      this._log('Kon notionalDecimals niet ophalen, val terug op 2 decimalen');
+    }
+
     const res = await this._request('privateCreateOrder', {
       market,
       side:        'buy',
       orderType:   'market',
-      amountQuote: amountInEur.toFixed(2),
+      amountQuote: amountInEur.toFixed(notionalDecimals),
       operatorId:  1001, // verplicht veld sinds 2024
     });
     return res?.response || res;
@@ -376,13 +422,27 @@ class BitvavoClient {
   async marketSell(ourSymbol, amount) {
     const market = BV_SYMBOL_MAP[ourSymbol];
     if (!market) throw new Error(`Onbekend paar: ${ourSymbol}`);
-    const rounded = parseFloat(amount.toFixed(8));
-    if (rounded <= 0) throw new Error('Hoeveelheid te klein');
+
+    // Haal de juiste decimale precisie op voor DEZE markt (DE FIX)
+    let precision = 6;
+    try {
+      const info = await this.getMarketInfo(ourSymbol);
+      precision = info.amountPrecision;
+    } catch {
+      this._log('Kon marktprecisie niet ophalen, val terug op 6 decimalen');
+    }
+
+    const rounded = this._roundAmount(amount, precision);
+    if (rounded <= 0) throw new Error('Hoeveelheid te klein na afronding');
+
+    // toFixed met de juiste precisie i.p.v. vaste 8 decimalen
+    const amountStr = rounded.toFixed(precision);
+
     const res = await this._request('privateCreateOrder', {
       market,
       side:       'sell',
       orderType:  'market',
-      amount:     rounded.toString(),
+      amount:     amountStr,
       operatorId: 1001,
     });
     return res?.response || res;

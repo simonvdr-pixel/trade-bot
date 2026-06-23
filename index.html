@@ -222,6 +222,21 @@ input[type=range]{width:100%;accent-color:var(--blue)}
     <div id="paper-stats"></div>
   </div>
 
+  <!-- Live-trading halt banner — alleen zichtbaar als de bot gepauzeerd is -->
+  <div class="card" id="halt-banner" style="display:none;background:#2a0d0d;border:1px solid var(--red)">
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <div style="font-size:22px">⏸</div>
+      <div style="flex:1">
+        <div style="font-weight:800;color:var(--red);font-size:14px">Bot gepauzeerd</div>
+        <div id="halt-reason" style="font-size:12px;color:var(--sub);margin-top:3px"></div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin:10px 0;line-height:1.5">
+      De bot stopt automatisch met handelen zodra een live order mislukt — hij valt <b>niet</b> stilletjes terug op paper trading. Los het probleem op (bijv. saldo, verbinding, of marktinstellingen) en hervat dan zelf.
+    </div>
+    <button onclick="resumeLiveTrading()" style="width:100%;padding:11px;background:var(--blue);border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer">▶ Hervat handelen</button>
+  </div>
+
   <div style="margin:0 12px 10px">
     <button id="toggle-bot-btn" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:12px;border:none;width:100%;font-size:15px;font-weight:700;cursor:pointer;background:var(--green);color:#000">▶ Start bot</button>
   </div>
@@ -515,6 +530,13 @@ let customPatterns=JSON.parse(localStorage.getItem('tb_custom_patterns')||'[]');
 let botActive=false,botLog=[],currentPair='XAU/USD',currentTF='5m';
 // ── Trading modus ─────────────────────────────────────────────
 let tradingMode = localStorage.getItem('tb_mode') || 'paper'; // 'paper' | 'live'
+
+// ── Live-trading pauze bij fouten ──────────────────────────────
+// Als een ECHTE Bitvavo order mislukt in live modus, pauzeert de bot
+// volledig (geen koop/verkoop, ook geen stille terugval naar paper)
+// totdat het probleem is opgelost en de persoon zelf op "Hervat" klikt.
+let liveHalted = localStorage.getItem('tb_live_halted') === '1';
+let liveHaltReason = localStorage.getItem('tb_live_halt_reason') || '';
 
 let strategy={
   indicator:'Combined',
@@ -821,6 +843,7 @@ function setTF(tf){
 // ══════════════════════════════════════════════════════
 function runBot(){
   if(!botActive)return;
+  if(liveHalted)return; // bot ligt stil tot iemand handmatig hervat
   strategy.markets.forEach(sym=>{
     const price=prices[sym];if(!price)return;
     const pos=openPositions[sym];
@@ -838,30 +861,136 @@ function runBot(){
     else if(sig.signal==='KOPEN'){shouldBuy=true;reason=sig.reasons[0]||'Signaal';}
     if(shouldBuy){
       const spend=cash*(strategy.positionSize/100);if(spend<1)return;
-      cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
-      addTrade({sym,side:'BUY',qty:spend/price,price,reason});
-      const modeTag=tradingMode==='paper'?'📄':'💶';
-      addLog(`🟢 ${modeTag} BUY ${sym} @ €${fmt(price)} — ${reason}`);
-      toast(`${modeTag} BUY ${sym}`,'#00d68f');save();
+      executeBotBuy(sym, price, spend, reason);
     }
   });
 }
-function executeSell(sym,price,pos,reason){
+
+// Bot-koop die ECHT door Bitvavo gaat in live modus, en bij fout
+// de bot volledig pauzeert i.p.v. stilletjes door te gaan met nep geld.
+async function executeBotBuy(sym, price, spend, reason){
+  const modeTag = tradingMode==='paper' ? '📄' : '💶';
+
+  if(tradingMode==='live'){
+    if(!window._bvConnected || !window._bvClient){
+      haltLiveTrading('Bitvavo niet verbonden — kan geen live order plaatsen');
+      return;
+    }
+    if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
+      haltLiveTrading(`${sym} wordt niet ondersteund door Bitvavo`);
+      return;
+    }
+    try{
+      const result = await window._bvClient.marketBuy(sym, spend);
+      const realQty   = parseFloat(result.filledAmount || spend/price);
+      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
+      cash -= spend;
+      openPositions[sym] = {qty:realQty, entryPrice:realPrice};
+      addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason});
+      addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins) — ${reason}`);
+      toast(`💶 BUY ${sym} — ECHTE ORDER`,'#00d68f'); save();
+    } catch(err){
+      haltLiveTrading(`Order mislukt voor ${sym}: ${err.message}`);
+    }
+    return;
+  }
+
+  // Paper modus — gewoon gesimuleerd, geen koppeling nodig
+  cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
+  addTrade({sym,side:'BUY',qty:spend/price,price,reason});
+  addLog(`🟢 ${modeTag} BUY ${sym} @ €${fmt(price)} — ${reason}`);
+  toast(`${modeTag} BUY ${sym}`,'#00d68f');save();
+}
+
+// Pauzeer de bot volledig bij een live-trading fout — GEEN stille
+// terugval naar paper trading, de persoon moet zelf weer hervatten.
+function haltLiveTrading(reason){
+  liveHalted = true;
+  liveHaltReason = reason;
+  botActive = false; // bot-loop stopt ook helemaal
+  addLog(`⏸ BOT GEPAUZEERD: ${reason}`);
+  toast(`⏸ Bot gepauzeerd — ${reason}`, '#ff4757');
+  save();
+  renderBot();
+}
+
+// Hervat live trading na handmatige bevestiging dat het probleem is opgelost
+function resumeLiveTrading(){
+  liveHalted = false;
+  liveHaltReason = '';
+  addLog('▶ Bot hervat door gebruiker');
+  toast('▶ Bot hervat', '#00d68f');
+  renderBot();
+}
+async function executeSell(sym,price,pos,reason){
+  if(tradingMode==='live'){
+    if(liveHalted) return; // bot ligt al stil, niet opnieuw proberen
+    if(!window._bvConnected || !window._bvClient){
+      haltLiveTrading('Bitvavo niet verbonden — kan geen live order plaatsen');
+      return;
+    }
+    if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
+      haltLiveTrading(`${sym} wordt niet ondersteund door Bitvavo`);
+      return;
+    }
+    try{
+      const result = await window._bvClient.marketSell(sym, pos.qty);
+      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
+      const pnl = pos.qty*realPrice - pos.qty*pos.entryPrice;
+      delete openPositions[sym];
+      addTrade({sym,side:'SELL',qty:pos.qty,price:realPrice,pnl,reason});
+      addLog(`✅ 💶 BITVAVO ORDER: SELL ${sym} @ €${fmt(realPrice)} — ${reason}`);
+      toast(`💶 ${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
+      save();
+    } catch(err){
+      haltLiveTrading(`Verkooporder mislukt voor ${sym}: ${err.message}`);
+    }
+    return;
+  }
+
+  // Paper modus — gesimuleerd
   const pnl=pos.qty*price-pos.qty*pos.entryPrice;
   cash+=pos.qty*price;delete openPositions[sym];
   addTrade({sym,side:'SELL',qty:pos.qty,price,pnl,reason});
-  addLog(`${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(price)} — ${reason}`);
-  toast(`${reason}: ${sym} ${pnl>=0?'+':''}$${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
+  addLog(`📄 ${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(price)} — ${reason}`);
+  toast(`${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
   save();
 }
 function addTrade(t){trades.unshift({...t,ts:new Date().toLocaleTimeString('nl-NL')});trades=trades.slice(0,300);renderTrades();}
 function addLog(msg){botLog.unshift({msg,ts:new Date().toLocaleTimeString('nl-NL')});botLog=botLog.slice(0,100);}
-function manualBuy(){
+async function manualBuy(){
   const sym=currentPair,price=prices[sym];if(!price)return;
   const spend=cash*(strategy.positionSize/100);if(spend<1){toast('Niet genoeg cash','#ff4757');return;}
+
+  if(tradingMode==='live'){
+    if(liveHalted){ toast('⏸ Bot is gepauzeerd — los het probleem op en hervat eerst','#ff4757'); return; }
+    if(!window._bvConnected || !window._bvClient){
+      haltLiveTrading('Bitvavo niet verbonden — kan geen live order plaatsen');
+      return;
+    }
+    if(!window.BITVAVO_SYMBOL_MAP?.[sym]){
+      toast(`${sym} wordt niet ondersteund door Bitvavo`,'#ff4757');
+      return;
+    }
+    try{
+      const result = await window._bvClient.marketBuy(sym, spend);
+      const realQty   = parseFloat(result.filledAmount || spend/price);
+      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
+      cash -= spend;
+      openPositions[sym] = {qty:realQty, entryPrice:realPrice};
+      addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason:'Handmatig (Bitvavo)'});
+      addLog(`✅ 💶 BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins)`);
+      toast(`💶 BUY ${sym} — ECHTE ORDER`,'#00d68f'); save();
+    } catch(err){
+      haltLiveTrading(`Koop mislukt voor ${sym}: ${err.message}`);
+    }
+    return;
+  }
+
+  // Paper modus
   cash-=spend;openPositions[sym]={qty:spend/price,entryPrice:price};
   addTrade({sym,side:'BUY',qty:spend/price,price,reason:'Handmatig'});
-  addLog(`🟢 HANDMATIG BUY ${sym} @ €${fmt(price)}`);toast(`BUY ${sym}`,'#00d68f');save();
+  addLog(`🟢 📄 HANDMATIG BUY ${sym} @ €${fmt(price)}`);toast(`BUY ${sym}`,'#00d68f');save();
 }
 function manualSell(){
   const sym=currentPair,pos=openPositions[sym];
@@ -876,14 +1005,34 @@ function renderBot(){
   const isPaper = tradingMode === 'paper';
   const btn=document.getElementById('toggle-bot-btn');
   const dot=document.getElementById('bot-dot'),lbl=document.getElementById('bot-label');
-  if(botActive){
-    btn.textContent='⏹ Stop bot';btn.style.background='var(--red)';btn.style.color='#fff';
-    dot.style.background='var(--green)';dot.style.boxShadow='0 0 6px var(--green)';
-    lbl.textContent='Bot actief';lbl.style.color='var(--green)';
+
+  // Halt banner — heeft voorrang op alles, blokkeert de start/stop knop
+  const haltBanner = document.getElementById('halt-banner');
+  if(liveHalted){
+    haltBanner.style.display = 'block';
+    document.getElementById('halt-reason').textContent = liveHaltReason;
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    btn.style.cursor = 'not-allowed';
+    btn.textContent = '⏸ Gepauzeerd — los probleem op';
+    btn.style.background = 'var(--dim)';
+    btn.style.color = '#fff';
+    dot.style.background='var(--red)';dot.style.boxShadow='0 0 6px var(--red)';
+    lbl.textContent='Gepauzeerd';lbl.style.color='var(--red)';
   } else {
-    btn.textContent='▶ Start bot';btn.style.background='var(--green)';btn.style.color='#000';
-    dot.style.background='var(--dim)';dot.style.boxShadow='none';
-    lbl.textContent='Bot uit';lbl.style.color='var(--dim)';
+    haltBanner.style.display = 'none';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    if(botActive){
+      btn.textContent='⏹ Stop bot';btn.style.background='var(--red)';btn.style.color='#fff';
+      dot.style.background='var(--green)';dot.style.boxShadow='0 0 6px var(--green)';
+      lbl.textContent='Bot actief';lbl.style.color='var(--green)';
+    } else {
+      btn.textContent='▶ Start bot';btn.style.background='var(--green)';btn.style.color='#000';
+      dot.style.background='var(--dim)';dot.style.boxShadow='none';
+      lbl.textContent='Bot uit';lbl.style.color='var(--dim)';
+    }
   }
 
   // Mode UI
@@ -1202,12 +1351,21 @@ function toggleMarket(sym){
 // TRADING MODUS
 // ══════════════════════════════════════════════════════
 function setMode(mode){
+  if(mode === 'live' && liveHalted){
+    toast('⏸ Eerst hervatten voordat je opnieuw naar live kunt','var(--red)');
+    return;
+  }
   if(mode === 'live' && !window._bvConnected){
     toast('⚠️ Verbind eerst Bitvavo via de knop bovenin!','var(--red)');
     return;
   }
   if(mode === 'live'){
     if(!confirm('⚠️ LET OP: Je schakelt over naar LIVE modus. De bot plaatst dan ECHTE orders met ECHT geld op Bitvavo. Weet je het zeker?')) return;
+  }
+  if(mode === 'paper' && liveHalted){
+    // Halt was alleen relevant voor live trading — opheffen bij wisselen naar paper
+    liveHalted = false;
+    liveHaltReason = '';
   }
   tradingMode = mode;
   localStorage.setItem('tb_mode', mode);
@@ -1263,6 +1421,8 @@ function save(){
   localStorage.setItem('tb_positions',JSON.stringify(openPositions));
   localStorage.setItem('tb_trades',JSON.stringify(trades));
   localStorage.setItem('tb_custom_patterns',JSON.stringify(customPatterns));
+  localStorage.setItem('tb_live_halted', liveHalted ? '1' : '0');
+  localStorage.setItem('tb_live_halt_reason', liveHaltReason);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1274,6 +1434,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(
 // EVENTS
 // ══════════════════════════════════════════════════════
 document.getElementById('toggle-bot-btn').addEventListener('click',()=>{
+  if(liveHalted){ toast('⏸ Eerst hervatten via de knop in het gepauzeerd-blok','var(--red)'); return; }
   botActive=!botActive;addLog(botActive?'▶ Bot gestart':'⏹ Bot gestopt');renderBot();
 });
 document.getElementById('btn-buy').addEventListener('click',manualBuy);
@@ -1347,51 +1508,6 @@ if(!localStorage.getItem('tb_cash')){
 
   console.log('[TradeBot] Bitvavo verbonden');
 })();
-
-// ── Echte orders via Bitvavo ────────────────────────────────────
-const _origSell = executeSell;
-async function executeSell(sym, price, pos, reason){
-  if(tradingMode==='live' && window._bvConnected && window._bvClient && window.BITVAVO_SYMBOL_MAP?.[sym]){
-    try{
-      const result = await window._bvClient.marketSell(sym, pos.qty);
-      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
-      price = realPrice;
-      addLog(`✅ BITVAVO ORDER: SELL ${sym} @ €${fmt(realPrice)}`);
-    } catch(err){
-      addLog(`❌ Bitvavo order mislukt: ${err.message} — simulatie gebruikt`);
-    }
-  }
-  const pnl=pos.qty*price-pos.qty*pos.entryPrice;
-  cash+=pos.qty*price; delete openPositions[sym];
-  addTrade({sym,side:'SELL',qty:pos.qty,price,pnl,reason});
-  addLog(`${pnl>=0?'🔵':'🔴'} SELL ${sym} @ €${fmt(price)} — ${reason}`);
-  toast(`${reason}: ${sym} ${pnl>=0?'+':''}€${fmt(Math.abs(pnl))}`,pnl>=0?'#00d68f':'#ff4757');
-  save();
-}
-
-const _origManualBuy = manualBuy;
-async function manualBuy(){
-  const sym=currentPair, price=prices[sym]; if(!price)return;
-  const spend=cash*(strategy.positionSize/100);
-  if(spend<1){toast('Niet genoeg cash','#ff4757');return;}
-  if(tradingMode==='live' && window._bvConnected && window._bvClient && window.BITVAVO_SYMBOL_MAP?.[sym]){
-    try{
-      const result = await window._bvClient.marketBuy(sym, spend);
-      const realQty   = parseFloat(result.filledAmount || spend/price);
-      const realPrice = result.fills?.[0] ? parseFloat(result.fills[0].price) : price;
-      cash -= spend;
-      openPositions[sym] = {qty:realQty, entryPrice:realPrice};
-      addTrade({sym,side:'BUY',qty:realQty,price:realPrice,reason:'Handmatig (Bitvavo)'});
-      addLog(`✅ BITVAVO ORDER: BUY ${sym} @ €${fmt(realPrice)} (${fmt(realQty,6)} coins)`);
-      toast(`BUY ${sym} — ECHTE ORDER`,'#00d68f'); save(); return;
-    } catch(err){
-      addLog(`❌ Bitvavo order mislukt: ${err.message} — simulatie gebruikt`);
-    }
-  }
-  cash-=spend; openPositions[sym]={qty:spend/price,entryPrice:price};
-  addTrade({sym,side:'BUY',qty:spend/price,price,reason:'Handmatig'});
-  addLog(`🟢 HANDMATIG BUY ${sym}`); toast(`BUY ${sym}`,'#00d68f'); save();
-}
 </script>
 </body>
 </html>
